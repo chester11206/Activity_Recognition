@@ -1,0 +1,63 @@
+<resources>
+    <string name="app_name">Activity</string>
+
+    <!-- TODO: Remove or change this placeholder text -->
+    <string name="hello_blank_fragment">Hello blank fragment</string>
+
+    <string name="title_activity_sensors_api">SensorsAPI</string>
+    <string name="intro_text">Hi! Let\'s listen to some available data sources! Check the menu for more actions!</string>
+    <string name="action_unregister_listener">Unregister listener</string>
+    <string name="action_settings">Set Sensors</string>
+    <string name="permission_rationale">Location data is used as part of the Google Fit API</string>
+    <string name="permission_denied_explanation">Permission was denied, but is needed for core
+        functionality.</string>
+    <string name="settings">Settings</string>
+    <string name="ok">OK</string>
+
+    <string name="title_activity_history_api">HistoryAPI</string>
+    <string name="action_update_session">Update step count data</string>
+    <string name="action_delete_session">Delete step count data</string>
+
+    <string name="title_activity_recording_api">RecordingAPI</string>
+    <string name="action_dump_subs">List Active Subscriptions</string>
+    <string name="action_cancel_subs">Cancel subscriptions</string>
+
+    <string name="http_code_400">La syntaxe de la requête est erronée.</string>
+    <string name="http_code_401">Une authentification est nécessaire pour accéder à la ressource.</string>
+    <string name="http_code_403">Le serveur a compris la requête, mais refuse de l\'exécuter. Contrairement à l\'erreur 401, s\'authentifier ne fera aucune différence. Sur les serveurs où l\'authentification est requise, cela signifie généralement que l\'authentification a été acceptée mais que les droits d\'accès ne permettent pas au client d\'accéder à la ressource.</string>
+    <string name="http_code_404">Ressource non trouvée.</string>
+    <string name="loginactivity_grantsfails_quit">Ok, the application can not work if you don\'t give us the grants to access to your GDrive. Sorry we quit.</string>
+
+    <string-array name="sensors">
+        <item>Activity</item>
+        <item>Step</item>
+        <item>Accelerometer</item>
+        <item>Distance</item>
+        <item>Location</item>
+        <!--<item>Speed</item>-->
+        <!--<item>Weight</item>-->
+        <!--<item>Nutrition</item>-->
+        <!--<item>Heart Rate BPM</item>-->
+        <!--<item>Calories</item>-->
+    </string-array>
+
+    <string-array name="multiSensors">
+        <item>Step</item>
+        <item>Accelerometer</item>
+        <item>Gyroscope</item>
+        <!--<item>Speed</item>-->
+        <!--<item>Weight</item>-->
+        <!--<item>Nutrition</item>-->
+        <!--<item>Heart Rate BPM</item>-->
+        <!--<item>Calories</item>-->
+    </string-array>
+
+    <string-array name="activity">
+        <item>Still</item>
+        <item>Walking</item>
+        <item>Running</item>
+        <item>Biking</item>
+        <item>In Vehicle</item>
+        <item>Tilting</item>
+    </string-array>
+</resources>
