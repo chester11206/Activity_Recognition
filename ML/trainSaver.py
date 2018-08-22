@@ -116,8 +116,8 @@ def write_data(raw_data):
     print (new_data.shape)
 
     # clean firebase
-    root = db.reference()
-    root.child('SensorDataSet').delete()
+    # root = db.reference()
+    # root.child('SensorDataSet').delete()
 
     return new_data
 
@@ -240,7 +240,8 @@ X = tf.placeholder(tf.float32, [None, timestep_size, input_size])
 # **Step 2: Run MultiRNN with ((lstm + dropout) * 2)
 mlstm_cell = []
 for i in range(layer_num):
-    lstm_cell = rnn.BasicLSTMCell(num_units=hidden_size, forget_bias=1.0, state_is_tuple=True)
+    #lstm_cell = rnn.BasicLSTMCell(num_units=hidden_size, forget_bias=1.0, state_is_tuple=True)
+    lstm_cell = tf.nn.rnn_cell.LSTMCell(num_units=hidden_size, forget_bias=1.0, state_is_tuple=True, name='basic_lstm_cell')
     lstm_cell = rnn.DropoutWrapper(cell=lstm_cell, input_keep_prob=1.0, output_keep_prob=keep_prob)
     mlstm_cell.append(lstm_cell)
 mlstm_cell = tf.contrib.rnn.MultiRNNCell(mlstm_cell,state_is_tuple=True)
@@ -323,7 +324,11 @@ with tf.Session(config=config) as sess:
     frozen_graphdef = tf.graph_util.convert_variables_to_constants(sess, sess.graph_def, list(map(canonical_name, frozen_tensors)))
     # tf.train.write_graph(frozen_graphdef, "model",
     #                  'rnn.pb', as_text=False)
-    tflite_model = tf.contrib.lite.toco_convert(frozen_graphdef, [X_train], out_tensors, allow_custom_ops=True)
+    #toco_convert
+    tflite_model = tf.contrib.lite.TocoConverter(frozen_graphdef, [X_train], out_tensors, allow_custom_ops=True)
+
+    converter = tf.contrib.lite.TocoConverter.from_frozen_graph(frozen_graphdef, [X_train], out_tensors, allow_custom_ops=True)
+    tflite_model = converter.convert()
 
     #open("writer_model.tflite", "wb").write(tflite_model)
 
