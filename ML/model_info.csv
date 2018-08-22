@@ -1,0 +1,2 @@
+Index,Test Accuracy,Batch Size,Epoch,Model Layer
+0,0.40963855,64,10,(lstm + dropout) * 2

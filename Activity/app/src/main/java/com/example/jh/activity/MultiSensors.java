@@ -114,7 +114,7 @@ public class MultiSensors {
             TextView txv = new TextView(context);
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
 
-            txv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
+            txv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 17);
             txv.setMovementMethod(new ScrollingMovementMethod());
             txv.setLayoutParams(params);
             ll.addView(txv);
@@ -128,7 +128,6 @@ public class MultiSensors {
         Button stopbtn = (Button) context.findViewById(R.id.stopbtn);
         stopbtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View view) {
-                txvResult.append("\nStop");
                 if (mSensorManager != null) {
                     mSensorManager.unregisterListener(mSensorEventListener);
                 }
@@ -174,9 +173,10 @@ public class MultiSensors {
             switch (event.sensor.getType()) {
                 case Sensor.TYPE_ACCELEROMETER:
                     if (startListen_acce) {
-                        txv.setText("\nAccelerometer X: " + event.values[0]
-                                + "\nAccelerometer Y: " + event.values[1]
-                                + "\nAccelerometer Z: " + event.values[2]);
+                        txv.setText("\nAccelerometer"
+                                + "\nX: " + event.values[0]
+                                + "\nY: " + event.values[1]
+                                + "\nZ: " + event.values[2]);
                         acceData acceData = new acceData();
                         acceData.setAccelerometer(event.values[0], event.values[1], event.values[2]);
                         acceDataSet.add(acceData);
@@ -223,9 +223,10 @@ public class MultiSensors {
                     break;
                 case Sensor.TYPE_GYROSCOPE:
                     if (startListen_gyro) {
-                        txv.setText("\nGyroscope X: " + event.values[0]
-                                + "\nGyroscope Y: " + event.values[1]
-                                + "\nGyroscope Z: " + event.values[2]);
+                        txv.setText("\nGyroscope"
+                                + "\nX: " + event.values[0]
+                                + "\nY: " + event.values[1]
+                                + "\nZ: " + event.values[2]);
                         gyroData gyroData = new gyroData();
                         gyroData.setGyroscope(event.values[0], event.values[1], event.values[2]);
                         gyroDataSet.add(gyroData);

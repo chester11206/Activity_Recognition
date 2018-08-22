@@ -182,15 +182,6 @@ public class MainActivity extends AppCompatActivity {
 
                         }
                     });
-//                    Button removebtn = (Button) findViewById(R.id.removebtn);
-//                    removebtn.setOnClickListener(new View.OnClickListener() {
-//                        public void onClick(View view) {
-//                            DatabaseReference mDatabase = FirebaseDatabase.getInstance().getReference();
-//                            mDatabase.child("SensorDataSet").removeValue();
-//                            txvResult = (TextView) findViewById(R.id.multisensorstxView);
-//                            txvResult.append("\nRemove Succeed");
-//                        }
-//                    });
                     break;
                 default:
                     break;
