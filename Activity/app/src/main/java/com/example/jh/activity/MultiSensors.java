@@ -66,20 +66,24 @@ public class MultiSensors {
         private float accelerometerX = 0;
         private float accelerometerY = 0;
         private float accelerometerZ = 0;
-        private long TimeNow = MainActivity.timeNow;
-        private String real_activty = null;
+        private long TimeNow;
+        private String real_activit;
 
         public acceData(float aX, float aY, float aZ, String ra) {
             accelerometerX = aX;
             accelerometerY = aY;
             accelerometerZ = aZ;
             real_activity = ra;
+            Calendar cal = Calendar.getInstance();
+            Date now = new Date();
+            cal.setTime(now);
+            TimeNow = cal.getTimeInMillis();
         }
         public float getAccelerometerX() {return accelerometerX;}
         public float getAccelerometerY() {return accelerometerY;}
         public float getAccelerometerZ() {return accelerometerZ;}
         public long getTimeNow() {return TimeNow;}
-        public String getReal_activty() {return real_activty;}
+        public String getReal_activity() {return real_activity;}
     }
 
     @IgnoreExtraProperties
@@ -210,7 +214,7 @@ public class MultiSensors {
                             SensorData.put("gyroscopeZ", gyroDataSet.get(i).getGyroscopeZ());
                             SensorData.put("timeNow", (float)acceDataSet.get(i).getTimeNow());
                             for (String activity : activityItems) {
-                                if (activity.equals(acceDataSet.get(i).getReal_activty())) {
+                                if (activity.equals(acceDataSet.get(i).getReal_activity())) {
                                     SensorData.put(activity, (float) 1);
                                 } else {
                                     SensorData.put(activity, (float) 0);

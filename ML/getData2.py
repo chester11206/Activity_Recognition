@@ -8,6 +8,9 @@ import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import db
 from operator import itemgetter
+from pathlib import Path
+
+home = str(Path.home())
 
 cred = credentials.Certificate('firebase-adminsdk.json')
 firebase_admin.initialize_app(cred, {
@@ -29,7 +32,7 @@ class_type = ["Biking", "In Vehicle", "Running", "Still", "Tilting", "Walking", 
 
 train_p = 0.8
 
-csv_folder_name = "data"
+csv_folder_name = os.path.join(home, "ActivityData/data")
 csv_file_name = "rawData"
 
 def connect_firebase_admin():
@@ -41,13 +44,62 @@ def connect_firebase_admin():
     
     data_num = data.shape[0] - (data.shape[0] % timestep_size)
     npdata = np.array(data.values)
-    npdata = npdata[:data_num, class_num:]
+    npdata = npdata[:data_num,:]
     print (npdata.shape)
-    new_npdata = [npdata[i:i+timestep_size,:].flatten() for i in range(0, data_num, timestep_size)]
+
+    # activity_all = npdata[:, :class_num]
+    # for i in activity_all:
+    #     al = []
+    #     for j in i:
+    #         al.append(j)
+    #     print (al)
+
+    activity_base = npdata[0, :class_num]
+    idx_base = 0
+    for i in activity_base:
+        if int(i) == 1:
+            break
+        else:
+            idx_base+=1
+
+    new_npdata = []
+    for i in range(0, npdata.shape[0]):
+        activity_temp = npdata[i, :class_num]
+        idx_temp = 0
+        for act in activity_temp:
+            if int(act) == 1:
+                break
+            else:
+                idx_temp+=1
+
+        if (i+1)%timestep_size == 0:
+            temp_data_last = npdata[i+1-timestep_size:i+1, class_num:].flatten()
+            temp_data_last = np.hstack((activity_temp, temp_data_last))
+            new_npdata.append(temp_data_last)
+
+        if idx_temp != idx_base:
+            if i%timestep_size != 0:
+                temp_data_last = npdata[i-timestep_size:i, class_num:].flatten()
+                temp_data_last = np.hstack((activity_base, temp_data_last))
+                new_npdata.append(temp_data_last)
+            if i+timestep_size <= data_num:
+                temp_data_next = npdata[i:i+timestep_size, class_num:].flatten()
+                temp_data_next = np.hstack((activity_temp, temp_data_next))
+                new_npdata.append(temp_data_next)
+
+            idx_base = idx_temp
+            activity_base = activity_temp
+
+
+
+    # new_npdata = [npdata[i:i+timestep_size,:].flatten() for i in range(0, data_num, timestep_size)]
     new_npdata = np.array(new_npdata)
 
     print (new_npdata.shape)
     print (new_npdata[:,0:10])
+
+    # root = db.reference()
+    # root.child('SensorDataSet').delete()
 
     return new_npdata
 
@@ -110,6 +162,7 @@ def connect_firebase_pyrebase():
 def writetrain(raw_data):
     global csv_folder_name
     global csv_file_name
+    global class_type
 
     # **Raw Data
     # make new csv folder
@@ -152,28 +205,28 @@ def writetrain(raw_data):
 
 
 raw_data = connect_firebase_admin()
-# all_data = writetrain(raw_data)
+all_data = writetrain(raw_data)
 
-# permutation = np.random.permutation(all_data.shape[0])
-# new_dataset = all_data[permutation, :]
-# print (all_data.shape[0])
-# print (new_dataset.shape[0])
+permutation = np.random.permutation(all_data.shape[0])
+new_dataset = all_data[permutation, :]
+print (all_data.shape[0])
+print (new_dataset.shape[0])
 
-# dataNum = new_dataset.shape[0]
-# trainNum = int(dataNum*train_p)
-# trainX = new_dataset[:trainNum, class_num:]
-# trainY = new_dataset[:trainNum, :class_num].astype(int)
-# testX = new_dataset[trainNum:, class_num:]
-# testY = new_dataset[trainNum:,:class_num].astype(int)
+dataNum = new_dataset.shape[0]
+trainNum = int(dataNum*train_p)
+trainX = new_dataset[:trainNum, class_num:]
+trainY = new_dataset[:trainNum, :class_num].astype(int)
+testX = new_dataset[trainNum:, class_num:]
+testY = new_dataset[trainNum:,:class_num].astype(int)
 
-# print (trainX.shape)
-# print (trainY.shape)
-# print (testX.shape)
-# print (testY.shape)
-# print (trainX)
-# print (trainY)
-# print (testX)
-# print (testY)
+print (trainX.shape)
+print (trainY.shape)
+print (testX.shape)
+print (testY.shape)
+print (trainX)
+print (trainY)
+print (testX)
+print (testY)
 
 #and now the hard/ easy part that took me a while to figure out:
 # notice the value inside the .child, it should be the parent name with all the cats keys
