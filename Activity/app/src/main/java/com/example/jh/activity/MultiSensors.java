@@ -5,6 +5,8 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.os.Build;
+import android.support.annotation.NonNull;
 import android.text.method.ScrollingMovementMethod;
 import android.util.TypedValue;
 import android.view.View;
@@ -14,9 +16,22 @@ import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.TextView;
 
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.android.gms.tasks.Task;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.IgnoreExtraProperties;
+import com.google.firebase.ml.common.FirebaseMLException;
+import com.google.firebase.ml.custom.FirebaseModelDataType;
+import com.google.firebase.ml.custom.FirebaseModelInputOutputOptions;
+import com.google.firebase.ml.custom.FirebaseModelInputs;
+import com.google.firebase.ml.custom.FirebaseModelInterpreter;
+import com.google.firebase.ml.custom.FirebaseModelManager;
+import com.google.firebase.ml.custom.FirebaseModelOptions;
+import com.google.firebase.ml.custom.FirebaseModelOutputs;
+import com.google.firebase.ml.custom.model.FirebaseCloudModelSource;
+import com.google.firebase.ml.custom.model.FirebaseModelDownloadConditions;
 
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -254,4 +269,61 @@ public class MultiSensors {
             }
         }
     };
+
+    private void tflitePredict(float[][][] inputData) throws FirebaseMLException {
+        FirebaseModelDownloadConditions.Builder conditionsBuilder = new FirebaseModelDownloadConditions.Builder().requireWifi();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            // Enable advanced conditions on Android Nougat and newer.
+            conditionsBuilder = conditionsBuilder
+                    .requireCharging()
+                    .requireDeviceIdle();
+        }
+        FirebaseModelDownloadConditions conditions = conditionsBuilder.build();
+
+// Build a FirebaseCloudModelSource object by specifying the name you assigned the model
+// when you uploaded it in the Firebase console.
+        FirebaseCloudModelSource cloudSource = new FirebaseCloudModelSource.Builder("activity-rnn")
+                .enableModelUpdates(true)
+                .setInitialDownloadConditions(conditions)
+                .setUpdatesDownloadConditions(conditions)
+                .build();
+        FirebaseModelManager.getInstance().registerCloudModelSource(cloudSource);
+
+        FirebaseModelOptions options = new FirebaseModelOptions.Builder()
+                .setCloudModelName("activity-rnn")
+                .build();
+        FirebaseModelInterpreter firebaseInterpreter =
+                FirebaseModelInterpreter.getInstance(options);
+
+        FirebaseModelInputOutputOptions inputOutputOptions =
+                new FirebaseModelInputOutputOptions.Builder()
+                        .setInputFormat(0, FirebaseModelDataType.FLOAT32, new int[]{1, 450, 7})
+                        .setOutputFormat(0, FirebaseModelDataType.FLOAT32, new int[]{1, 6})
+                        .build();
+
+        float[][][] input = new float[1][450][7];
+        input = inputData;
+        FirebaseModelInputs inputs = new FirebaseModelInputs.Builder()
+                .add(input)  // add() as many input arrays as your model requires
+                .build();
+        Task<FirebaseModelOutputs> result =
+                firebaseInterpreter.run(inputs, inputOutputOptions)
+                        .addOnSuccessListener(
+                                new OnSuccessListener<FirebaseModelOutputs>() {
+                                    @Override
+                                    public void onSuccess(FirebaseModelOutputs result) {
+                                        // ...
+                                        float[][] output = result.<float[][]>getOutput(0);
+                                        float[] probabilities = output[0];
+                                    }
+                                })
+                        .addOnFailureListener(
+                                new OnFailureListener() {
+                                    @Override
+                                    public void onFailure(@NonNull Exception e) {
+                                        // Task failed with an exception
+                                        // ...
+                                    }
+                                });
+    }
 }

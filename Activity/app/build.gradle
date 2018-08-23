@@ -4,7 +4,7 @@ android {
     compileSdkVersion 28
     defaultConfig {
         applicationId "com.example.chester11206.testapp"
-        minSdkVersion 15
+        minSdkVersion 16
         targetSdkVersion 28
         versionCode 1
         versionName "1.0"
@@ -20,13 +20,6 @@ android {
     compileOptions {
         targetCompatibility 1.8
         sourceCompatibility 1.8
-    }
-    dexOptions {
-        javaMaxHeapSize "5g"
-    }
-    aaptOptions {
-        noCompress "tflite"
-        noCompress "lite"
     }
 }
 
@@ -52,13 +45,14 @@ dependencies {
     implementation 'com.squareup.okhttp3:logging-interceptor:3.5.0'
 
     implementation 'com.squareup.okio:okio:1.7.0'
-    implementation 'com.google.firebase:firebase-database:11.8.0'
+    implementation 'com.google.firebase:firebase-database:16.0.1'
     implementation 'com.google.gms:google-services:4.0.2'
 
     implementation "com.opencsv:opencsv:4.0"
 
     implementation "org.tensorflow:tensorflow-lite:+"
+    implementation 'com.google.firebase:firebase-core:16.0.1'
+    implementation 'com.google.firebase:firebase-ml-model-interpreter:16.2.0'
 }
-
 
 apply plugin: 'com.google.gms.google-services'
