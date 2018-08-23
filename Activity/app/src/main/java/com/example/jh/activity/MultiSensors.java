@@ -19,6 +19,8 @@ import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.IgnoreExtraProperties;
 
 import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -64,17 +66,20 @@ public class MultiSensors {
         private float accelerometerX = 0;
         private float accelerometerY = 0;
         private float accelerometerZ = 0;
+        private long TimeNow = MainActivity.timeNow;
+        private String real_activty = null;
 
-        public acceData() {}
-        public void setAccelerometer(float aX, float aY, float aZ) {
+        public acceData(float aX, float aY, float aZ, String ra) {
             accelerometerX = aX;
             accelerometerY = aY;
             accelerometerZ = aZ;
+            real_activity = ra;
         }
         public float getAccelerometerX() {return accelerometerX;}
         public float getAccelerometerY() {return accelerometerY;}
         public float getAccelerometerZ() {return accelerometerZ;}
-
+        public long getTimeNow() {return TimeNow;}
+        public String getReal_activty() {return real_activty;}
     }
 
     @IgnoreExtraProperties
@@ -177,8 +182,9 @@ public class MultiSensors {
                                 + "\nX: " + event.values[0]
                                 + "\nY: " + event.values[1]
                                 + "\nZ: " + event.values[2]);
-                        acceData acceData = new acceData();
-                        acceData.setAccelerometer(event.values[0], event.values[1], event.values[2]);
+                        String ra = real_activity;
+                        acceData acceData = new acceData(event.values[0], event.values[1], event.values[2], ra);
+
                         acceDataSet.add(acceData);
                         acceNum++;
 
@@ -193,25 +199,26 @@ public class MultiSensors {
                         stopNum = acceNum;
                         txvResult.setText("\nNum: " + startNum + " to " + stopNum + " " + "Activity: " + ra + "\nDataNum: " + dataNum);
 
-                        Map<String, Float> SensorData = new LinkedHashMap<String, Float>();
-                        int idx = 0;
+//                        Map<String, Float> SensorData = new LinkedHashMap<String, Float>();
                         for (int i = startNum; i < stopNum; i++) {
-                            SensorData.put("accelerometerX " + idx, acceDataSet.get(i).getAccelerometerX());
-                            SensorData.put("accelerometerY " + idx, acceDataSet.get(i).getAccelerometerY());
-                            SensorData.put("accelerometerZ " + idx, acceDataSet.get(i).getAccelerometerZ());
-                            SensorData.put("gyroscopeX " + idx, gyroDataSet.get(i).getGyroscopeX());
-                            SensorData.put("gyroscopeY " + idx, gyroDataSet.get(i).getGyroscopeY());
-                            SensorData.put("gyroscopeZ " + idx, gyroDataSet.get(i).getGyroscopeZ());
-                            idx++;
-                        }
-                        for (String activity : activityItems) {
-                            if (activity.equals(ra)) {
-                                SensorData.put(activity, (float) 1);
-                            } else {
-                                SensorData.put(activity, (float) 0);
+                            Map<String, Float> SensorData = new LinkedHashMap<String, Float>();
+                            SensorData.put("accelerometerX", acceDataSet.get(i).getAccelerometerX());
+                            SensorData.put("accelerometerY", acceDataSet.get(i).getAccelerometerY());
+                            SensorData.put("accelerometerZ", acceDataSet.get(i).getAccelerometerZ());
+                            SensorData.put("gyroscopeX", gyroDataSet.get(i).getGyroscopeX());
+                            SensorData.put("gyroscopeY", gyroDataSet.get(i).getGyroscopeY());
+                            SensorData.put("gyroscopeZ", gyroDataSet.get(i).getGyroscopeZ());
+                            SensorData.put("timeNow", (float)acceDataSet.get(i).getTimeNow());
+                            for (String activity : activityItems) {
+                                if (activity.equals(acceDataSet.get(i).getReal_activty())) {
+                                    SensorData.put(activity, (float) 1);
+                                } else {
+                                    SensorData.put(activity, (float) 0);
+                                }
                             }
+                            mDatabase.child("SensorDataSet").push().setValue(SensorData);
                         }
-                        mDatabase.child("SensorDataSet").push().setValue(SensorData);
+
 
 //                        if (startPredict) {
 //                            WriterIdentify writerIdentify = WriterIdentify.newInstance(context);

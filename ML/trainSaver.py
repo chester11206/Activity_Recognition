@@ -45,7 +45,7 @@ class_type = ["Biking", "In Vehicle", "Running", "Still", "Tilting", "Walking", 
 
 _batch_size = 128
 
-epoch_num = 2000
+epoch_num = 500
 
 # Training Data / Raw Data
 train_p = 0.8
@@ -116,12 +116,38 @@ def write_data(raw_data):
     print (new_data.shape)
 
     # clean firebase
-    # root = db.reference()
-    # root.child('SensorDataSet').delete()
+    root = db.reference()
+    root.child('SensorDataSet').delete()
 
     return new_data
 
-def write_result(sess, frozen_graphdef, tflite_model, test_accuracy):
+def write_model(sess, frozen_graphdef):
+    global model_folder_name
+    global model_file_name
+
+    # **Models
+    # make new models folder
+    i = 0
+    while os.path.exists(model_folder_name + str(i)):
+        i += 1
+    model_path = model_folder_name + str(i)
+    os.makedirs(model_path)
+
+    model_path = os.path.join(model_path, model_file_name)
+    ckpt_path = model_path + str(i) + ".ckpt"
+
+    # save model
+    # ckpt
+    saver = tf.train.Saver()
+    saver.save(sess, ckpt_path)
+    # pb
+    tf.train.write_graph(frozen_graphdef, model_folder_name + str(i),
+                     model_file_name + str(i) + '.pb', as_text=False)
+
+    pb_path = model_path + str(i) + '.pb'
+    return pb_path
+
+def write_result(tflite_model, test_accuracy):
     global model_folder_name
     global model_file_name
     global model_info_file_name
@@ -134,20 +160,12 @@ def write_result(sess, frozen_graphdef, tflite_model, test_accuracy):
     i = 0
     while os.path.exists(model_folder_name + str(i)):
         i += 1
-    model_path = model_folder_name + str(i)
-    os.makedirs(model_path)
+    model_path = model_folder_name + str(i-1)
 
     model_path = os.path.join(model_path, model_file_name)
-    ckpt_path = model_path + str(i) + ".ckpt"
-    tflite_path = model_path + str(i) + ".tflite"
+    tflite_path = model_path + str(i-1) + ".tflite"
 
     # save model
-    # ckpt
-    saver = tf.train.Saver()
-    saver.save(sess, ckpt_path)
-    # pb
-    tf.train.write_graph(frozen_graphdef, model_folder_name + str(i),
-                     model_file_name + str(i) + '.pb', as_text=False)
     # tflite
     open(tflite_path, "wb").write(tflite_model)
 
@@ -220,8 +238,8 @@ print (testX)
 print (testY)
 
 # set training x, y placeholder
-X_train = tf.placeholder(tf.float32, [_batch_size, timestep_size*input_size], name="imput_train_x")
-Y_train = tf.placeholder(tf.float32, [_batch_size, class_num], name="imput_train_y")
+X_train = tf.placeholder(tf.float32, [_batch_size, timestep_size*input_size], name="input_train_x")
+Y_train = tf.placeholder(tf.float32, [_batch_size, class_num], name="input_train_y")
 
 # set testing x, y placeholder
 X_test = tf.placeholder(tf.float32,[None, input_size*timestep_size], name='input_test_x')
@@ -322,14 +340,18 @@ with tf.Session(config=config) as sess:
     out_tensors = [out]
 
     frozen_graphdef = tf.graph_util.convert_variables_to_constants(sess, sess.graph_def, list(map(canonical_name, frozen_tensors)))
+    # save ckpt & pb, return pb path
+    frozen_graphdef_path = write_model(sess, frozen_graphdef)
+
     # tf.train.write_graph(frozen_graphdef, "model",
     #                  'rnn.pb', as_text=False)
     #toco_convert
-    tflite_model = tf.contrib.lite.TocoConverter(frozen_graphdef, [X_train], out_tensors, allow_custom_ops=True)
+    #tflite_model = tf.contrib.lite.TocoConverter(frozen_graphdef, [X_train], out_tensors, allow_custom_ops=True)
 
-    converter = tf.contrib.lite.TocoConverter.from_frozen_graph(frozen_graphdef, [X_train], out_tensors, allow_custom_ops=True)
+    converter = tf.contrib.lite.TocoConverter.from_frozen_graph(frozen_graphdef_path, ["Placeholder_1"], ["output"])
+    converter.allow_custom_ops=True
     tflite_model = converter.convert()
 
     #open("writer_model.tflite", "wb").write(tflite_model)
 
-    write_result(sess, frozen_graphdef, tflite_model, test_accuracy)
+    write_result(tflite_model, test_accuracy)
