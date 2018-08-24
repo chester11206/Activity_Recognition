@@ -2,3 +2,4 @@ Index,Test Accuracy,Batch Size,Epoch,Model Layer
 0,0.40963855,64,10,(lstm + dropout) * 2
 1,0.8593156,128,2000,(lstm + dropout) * 2
 7,0.61308414,128,500,(lstm + dropout) * 2
+3,0.5862944,128,500,(lstm + dropout) * 2

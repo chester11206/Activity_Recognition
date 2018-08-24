@@ -203,6 +203,21 @@ def writetrain(raw_data):
 
     return all_data
 
+def load_data(datafile):
+    read_data = list(csv.reader(open(datafile,'r')))
+
+    data = []
+    
+    for item in read_data[1:]:
+        data.append([i for i in item])
+    data = np.array(data)
+    print (data.shape)
+    
+    return data
+
+
+# readdata = load_data("rawData1.csv")
+# print (readdata.shape)
 
 raw_data = connect_firebase_admin()
 all_data = writetrain(raw_data)

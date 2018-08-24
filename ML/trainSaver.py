@@ -11,16 +11,21 @@ import csv
 import sys
 import os
 from operator import itemgetter
+from pathlib import Path
+from tensorflow.python.tools import freeze_graph
+from tensorflow.python.tools import optimize_for_inference_lib
+
+home = str(Path.home())
 
 cred = credentials.Certificate('firebase-adminsdk.json')
 firebase_admin.initialize_app(cred, {
     'databaseURL' : 'https://total-cascade-210406.firebaseio.com'
 })
 
-csv_folder_name = "data"
+csv_folder_name = os.path.join(home, "Activity_Source/Data")
 csv_file_name = "rawData"
 
-model_folder_name = "Activity_model/model"
+model_folder_name = os.path.join(home, "Activity_Source/Model/model")
 model_file_name = "ActivityRNN"
 
 model_info_file_name = "model_info.csv"
@@ -81,7 +86,7 @@ def write_data(raw_data):
     # **Raw Data
     # make new csv folder
     if not os.path.exists(csv_folder_name):
-        os.mkdir(csv_folder_name)
+        os.makedirs(csv_folder_name)
 
     csv_path = os.path.join(csv_folder_name, csv_file_name)
     i = 0
@@ -116,8 +121,8 @@ def write_data(raw_data):
     print (new_data.shape)
 
     # clean firebase
-    root = db.reference()
-    root.child('SensorDataSet').delete()
+    # root = db.reference()
+    # root.child('SensorDataSet').delete()
 
     return new_data
 
@@ -141,10 +146,34 @@ def write_model(sess, frozen_graphdef):
     saver = tf.train.Saver()
     saver.save(sess, ckpt_path)
     # pb
-    tf.train.write_graph(frozen_graphdef, model_folder_name + str(i),
-                     model_file_name + str(i) + '.pb', as_text=False)
+    # tf.train.write_graph(frozen_graphdef, model_folder_name + str(i),
+    #                  model_file_name + str(i) + '.pb', as_text=False)
+    tf.train.write_graph(sess.graph_def, model_folder_name + str(i),
+                     model_file_name + str(i) + '.pbtxt')
 
     pb_path = model_path + str(i) + '.pb'
+    pbtxt_path = model_path + str(i) + '.pbtxt'
+    opt_pb_path = model_path + "opt" + str(i) + ".pb"
+
+    freeze_graph.freeze_graph(input_graph = pbtxt_path,  input_saver = "",
+             input_binary = False, input_checkpoint = ckpt_path, output_node_names = "prediction",
+             restore_op_name = "save/restore_all", filename_tensor_name = "save/Const:0",
+             output_graph = pb_path, clear_devices = True, initializer_nodes = "")
+
+    input_graph_def = tf.GraphDef()
+    with tf.gfile.Open(pb_path, "rb") as f:
+        data = f.read()
+        input_graph_def.ParseFromString(data)
+
+    output_graph_def = optimize_for_inference_lib.optimize_for_inference(
+            frozen_graphdef,
+            ["input_x"], 
+            ["prediction"],
+            tf.float32.as_datatype_enum)
+
+    f = tf.gfile.FastGFile(opt_pb_path, "w")
+    f.write(output_graph_def.SerializeToString())
+
     return pb_path
 
 def write_result(tflite_model, test_accuracy):
@@ -212,10 +241,27 @@ def next_batch(X_train, Y_train, num, start):
 
     return batch_X, batch_Y, start
 
+def load_data(datafile):
+    read_data = list(csv.reader(open(datafile,'r')))
+
+    data = []
+    
+    for item in read_data[1:]:
+        data.append([i for i in item])
+    data = np.array(data)
+    print (data.shape)
+    
+    return data
+
+
+readdata = load_data("rawData1.csv")
+print (readdata.shape)
+new_dataset = write_data(readdata)
+
 
 # Read raw data
-raw_data = connect_firebase()
-new_dataset = write_data(raw_data)
+# raw_data = connect_firebase()
+# new_dataset = write_data(raw_data)
 permutation = np.random.permutation(new_dataset.shape[0])
 new_dataset = new_dataset[permutation, :]
 
@@ -238,6 +284,9 @@ print (testX)
 print (testY)
 
 # set training x, y placeholder
+X_ = tf.placeholder(tf.float32, [None, timestep_size*input_size], name="input_x")
+Y_ = tf.placeholder(tf.float32, [None, class_num], name="input_y")
+
 X_train = tf.placeholder(tf.float32, [_batch_size, timestep_size*input_size], name="input_train_x")
 Y_train = tf.placeholder(tf.float32, [_batch_size, class_num], name="input_train_y")
 
@@ -253,19 +302,20 @@ print (X_train.shape)
 ####################################################################
 
 # **Step 1: Input Shape = (batch_size, timestep_size, input_size)
-X = tf.placeholder(tf.float32, [None, timestep_size, input_size])
+#X = tf.placeholder(tf.float32, [None, timestep_size, input_size])
+X = tf.reshape(X_, [-1, timestep_size, input_size])
 
 # **Step 2: Run MultiRNN with ((lstm + dropout) * 2)
 mlstm_cell = []
 for i in range(layer_num):
     #lstm_cell = rnn.BasicLSTMCell(num_units=hidden_size, forget_bias=1.0, state_is_tuple=True)
     lstm_cell = tf.nn.rnn_cell.LSTMCell(num_units=hidden_size, forget_bias=1.0, state_is_tuple=True, name='basic_lstm_cell')
-    lstm_cell = rnn.DropoutWrapper(cell=lstm_cell, input_keep_prob=1.0, output_keep_prob=keep_prob)
+    lstm_cell = rnn.DropoutWrapper(cell=lstm_cell, input_keep_prob=1.0, output_keep_prob=1.0)
     mlstm_cell.append(lstm_cell)
 mlstm_cell = tf.contrib.rnn.MultiRNNCell(mlstm_cell,state_is_tuple=True)
 
 # **Step3: Initiate state with zero
-init_state = mlstm_cell.zero_state(batch_size, dtype=tf.float32)
+init_state = mlstm_cell.zero_state(tf.shape(X)[0], dtype=tf.float32)
 
 # **Step4: Calculate in timeStep
 outputs = list()
@@ -287,13 +337,13 @@ Y_pre = tf.nn.softmax(tf.matmul(h_state, W) + bias, name = "prediction")
 
 
 # Loss function and accuracy
-cross_entropy = -tf.reduce_mean(Y_train * tf.log(Y_pre))
+cross_entropy = -tf.reduce_mean(Y_ * tf.log(Y_pre))
 train_op = tf.train.AdamOptimizer(lr).minimize(cross_entropy)
 
-train_correct_prediction = tf.equal(tf.argmax(Y_pre,1), tf.argmax(Y_train,1))
+train_correct_prediction = tf.equal(tf.argmax(Y_pre,1), tf.argmax(Y_,1))
 train_accuracy = tf.reduce_mean(tf.cast(train_correct_prediction, "float"))
 
-test_correct_prediction = tf.equal(tf.argmax(Y_pre,1), tf.argmax(Y_test,1))
+test_correct_prediction = tf.equal(tf.argmax(Y_pre,1), tf.argmax(Y_,1))
 test_accuracy = tf.reduce_mean(tf.cast(test_correct_prediction, "float"))
 
 ####################################################################
@@ -322,16 +372,16 @@ with tf.Session(config=config) as sess:
         reshape_testX = np.array(testX).reshape(-1, timestep_size, input_size)
         if (i+1)%200 == 0:
             accuracy = sess.run(train_accuracy, feed_dict={
-                X_train:batch_X, Y_train: batch_Y, keep_prob: 1.0, batch_size: _batch_size, X: reshape_trainX})
+                X_:batch_X, Y_: batch_Y})
             #print ("Iter%d, step %d, training accuracy %g" % ( mnist.train.epochs_completed, (i+1), accuracy))
             print ("Iter%d, Epoch %d, Training Accuracy %g" % ( iters, (i+1), accuracy))
-        sess.run(train_op, feed_dict={X_train: batch_X, Y_train: batch_Y, keep_prob: 0.5, batch_size: _batch_size, X: reshape_trainX})
+        sess.run(train_op, feed_dict={X_: batch_X, Y_: batch_Y})
 
     # Testing data accuracy
     # print ("Test Accuracy %g"% sess.run(test_accuracy, feed_dict={
     #     X_test: mnist.test.images, Y_test: mnist.test.labels, keep_prob: 1.0, batch_size:mnist.test.images.shape[0], X: reshape_testX}))
     test_accuracy = sess.run(test_accuracy, feed_dict={
-        X_test: testX, Y_test: testY, keep_prob: 1.0, batch_size:testX.shape[0], X: reshape_testX})
+        X_: testX, Y_: testY})
     print ("Test Accuracy %g"% test_accuracy)
 
     #saver.save(sess, "model/rnn.ckpt")
@@ -348,7 +398,7 @@ with tf.Session(config=config) as sess:
     #toco_convert
     #tflite_model = tf.contrib.lite.TocoConverter(frozen_graphdef, [X_train], out_tensors, allow_custom_ops=True)
 
-    converter = tf.contrib.lite.TocoConverter.from_frozen_graph(frozen_graphdef_path, ["Placeholder_1"], ["output"])
+    converter = tf.contrib.lite.TocoConverter.from_frozen_graph(frozen_graphdef_path, ["input_x"], ["prediction"])
     converter.allow_custom_ops=True
     tflite_model = converter.convert()
 
