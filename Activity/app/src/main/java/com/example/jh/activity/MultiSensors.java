@@ -35,6 +35,7 @@ import com.google.firebase.ml.custom.model.FirebaseModelDownloadConditions;
 
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -49,12 +50,13 @@ public class MultiSensors {
     TextView txvResult;
     TextView predicttxv;
 
+    private ActivityInference activityInference;
     private SensorManager mSensorManager;
 
     private String [] activityItems = null;
     private String real_activity = "Still";
 
-    private boolean startPredict = false;
+    public static boolean startPredict = false;
     private boolean startListen_acce = false;
     private boolean startListen_gyro = false;
 
@@ -126,7 +128,7 @@ public class MultiSensors {
 
         txvResult = (TextView) this.context.findViewById(R.id.multisensorstxView);
         txvResult.setMovementMethod(new ScrollingMovementMethod());
-        predicttxv = (TextView) this.context.findViewById(R.id.predictView);
+        predicttxv = (TextView) this.context.findViewById(R.id.predict_txView);
         predicttxv.setMovementMethod(new ScrollingMovementMethod());
 
         RadioGroup rg = (RadioGroup)context.findViewById(R.id.radioGroup);
@@ -148,6 +150,8 @@ public class MultiSensors {
                     mSensorManager.getDefaultSensor(sensorstype_map.get(sensor)),
                     SensorManager.SENSOR_DELAY_FASTEST);
         }
+
+        activityInference = new ActivityInference(context);
 
         Button stopbtn = (Button) context.findViewById(R.id.stopbtn);
         stopbtn.setOnClickListener(new View.OnClickListener() {
@@ -219,6 +223,8 @@ public class MultiSensors {
                         txvResult.setText("\nNum: " + startNum + " to " + stopNum + " " + "Activity: " + ra + "\nDataNum: " + dataNum);
 
 //                        Map<String, Float> SensorData = new LinkedHashMap<String, Float>();
+                        float [] predictData = new float[2700];
+                        int predictNum = 0;
                         for (int i = startNum; i < stopNum; i++) {
                             Map<String, Float> SensorData = new LinkedHashMap<String, Float>();
                             SensorData.put("accelerometerX", acceDataSet.get(i).getAccelerometerX());
@@ -227,7 +233,12 @@ public class MultiSensors {
                             SensorData.put("gyroscopeX", gyroDataSet.get(i).getGyroscopeX());
                             SensorData.put("gyroscopeY", gyroDataSet.get(i).getGyroscopeY());
                             SensorData.put("gyroscopeZ", gyroDataSet.get(i).getGyroscopeZ());
+                            for (String key : SensorData.keySet()) {
+                                predictData[predictNum] = SensorData.get(key);
+                                predictNum += 1;
+                            }
                             SensorData.put("timeNow", (float)acceDataSet.get(i).getTimeNow());
+
                             for (String activity : activityItems) {
                                 if (activity.equals(acceDataSet.get(i).getReal_activity())) {
                                     SensorData.put(activity, (float) 1);
@@ -237,13 +248,9 @@ public class MultiSensors {
                             }
                             mDatabase.child("SensorDataSet").push().setValue(SensorData);
                         }
-
-
-//                        if (startPredict) {
-//                            WriterIdentify writerIdentify = WriterIdentify.newInstance(context);
-//                            writerIdentify.run(SensorData);
-//                            predicttxv.append("\nResult: " + writerIdentify.getResult());
-//                        }
+                        if (startPredict) {
+                            activityPrediction(predictData);
+                        }
                         sensorStart();
                     }
                     break;
@@ -270,60 +277,23 @@ public class MultiSensors {
         }
     };
 
-    private void tflitePredict(float[][][] inputData) throws FirebaseMLException {
-        FirebaseModelDownloadConditions.Builder conditionsBuilder = new FirebaseModelDownloadConditions.Builder().requireWifi();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            // Enable advanced conditions on Android Nougat and newer.
-            conditionsBuilder = conditionsBuilder
-                    .requireCharging()
-                    .requireDeviceIdle();
+    private void activityPrediction(float[] predictData)
+    {
+        float[] results = activityInference.getActivityProb(predictData);
+        int maxIndex = 0;
+        float max = -1;
+        for (int i = 0; i < results.length; i++) {
+            if (results[i] > max) {
+                max = results[i];
+                maxIndex = i;
+            }
         }
-        FirebaseModelDownloadConditions conditions = conditionsBuilder.build();
-
-// Build a FirebaseCloudModelSource object by specifying the name you assigned the model
-// when you uploaded it in the Firebase console.
-        FirebaseCloudModelSource cloudSource = new FirebaseCloudModelSource.Builder("activity-rnn")
-                .enableModelUpdates(true)
-                .setInitialDownloadConditions(conditions)
-                .setUpdatesDownloadConditions(conditions)
-                .build();
-        FirebaseModelManager.getInstance().registerCloudModelSource(cloudSource);
-
-        FirebaseModelOptions options = new FirebaseModelOptions.Builder()
-                .setCloudModelName("activity-rnn")
-                .build();
-        FirebaseModelInterpreter firebaseInterpreter =
-                FirebaseModelInterpreter.getInstance(options);
-
-        FirebaseModelInputOutputOptions inputOutputOptions =
-                new FirebaseModelInputOutputOptions.Builder()
-                        .setInputFormat(0, FirebaseModelDataType.FLOAT32, new int[]{1, 450, 7})
-                        .setOutputFormat(0, FirebaseModelDataType.FLOAT32, new int[]{1, 6})
-                        .build();
-
-        float[][][] input = new float[1][450][7];
-        input = inputData;
-        FirebaseModelInputs inputs = new FirebaseModelInputs.Builder()
-                .add(input)  // add() as many input arrays as your model requires
-                .build();
-        Task<FirebaseModelOutputs> result =
-                firebaseInterpreter.run(inputs, inputOutputOptions)
-                        .addOnSuccessListener(
-                                new OnSuccessListener<FirebaseModelOutputs>() {
-                                    @Override
-                                    public void onSuccess(FirebaseModelOutputs result) {
-                                        // ...
-                                        float[][] output = result.<float[][]>getOutput(0);
-                                        float[] probabilities = output[0];
-                                    }
-                                })
-                        .addOnFailureListener(
-                                new OnFailureListener() {
-                                    @Override
-                                    public void onFailure(@NonNull Exception e) {
-                                        // Task failed with an exception
-                                        // ...
-                                    }
-                                });
+        predicttxv.setText("\n" + activityItems[0] + ": " + String.format("%.8f", results[0])
+                + "\n\n" + activityItems[1] + ": " + String.format("%.8f", results[1])
+                + "\n\n" + activityItems[2] + ": " + String.format("%.8f", results[2])
+                + "\n\n" + activityItems[3] + ": " + String.format("%.8f", results[3])
+                + "\n\n" + activityItems[4] + ": " + String.format("%.8f", results[4])
+                + "\n\n" + activityItems[5] + ": " + String.format("%.8f", results[5])
+                + "\n\nResult: " + activityItems[maxIndex] + " " + String.format("%.8f", results[maxIndex]));
     }
 }

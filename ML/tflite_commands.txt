@@ -1,6 +1,6 @@
 bazel-bin/tensorflow/contrib/lite/toco/toco --input_file=$HOME/ActivityData/model0/ActivityRNN0.pb --input_format=TENSORFLOW_GRAPHDEF --output_format=TFLITE --output_file=$HOME/ActivityData/model0/ActivityRNN0_1.tflite --inference_type=FLOAT --input_type=FLOAT --input_arrays=input_train_x --output_arrays=predictions --input_shapes=-1,450,6 --allow_custom_ops
 
 bazel build tensorflow/tools/graph_transforms:summarize_graph
-bazel-bin/tensorflow/tools/graph_transforms/summarize_graph --in_graph=$HOME/Activity_Source/model0/ActivityRNN0.pb
+bazel-bin/tensorflow/tools/graph_transforms/summarize_graph --in_graph=$HOME/Activity_Source/Model0/ActivityRNN0.pb
  
 bazel-bin/tensorflow/python/tools/freeze_graph --input_graph=ML/ActivityRNN1.pb --input_checkpoint=ML/ActivityRNN1.ckpt --input_binary=true --output_graph=ML/ActivityRNN1_1.pb --output_node_names=prediction

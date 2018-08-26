@@ -3,3 +3,8 @@ Index,Test Accuracy,Batch Size,Epoch,Model Layer
 1,0.8593156,128,2000,(lstm + dropout) * 2
 7,0.61308414,128,500,(lstm + dropout) * 2
 3,0.5862944,128,500,(lstm + dropout) * 2
+1,0.5116883,128,2000,(lstm + dropout) * 2
+1,0.78294575,128,2000,(lstm + dropout) * 2
+2,0.3885659,128,500,depthConv + maxPool + depthConv
+3,0.6957364,128,500,depthConv + maxPool + depthConv
+4,0.7923077,128,2000,depthConv + maxPool + depthConv

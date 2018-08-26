@@ -44,6 +44,7 @@ public class MainActivity extends AppCompatActivity {
     private ViewPager mViewPager;
     private TabLayout mTabLayout;
     private View multiSensorsView;
+    private View predictView;
     public static int lastPosition = 0;
 
     boolean[] multiflags = new boolean[]{};//init multichoice = false
@@ -142,8 +143,10 @@ public class MainActivity extends AppCompatActivity {
         MyViewPagerAdapter adapter = new MyViewPagerAdapter();
         LayoutInflater inflater=getLayoutInflater();
         multiSensorsView = inflater.inflate(R.layout.multisensors_view, null);
+        predictView = inflater.inflate(R.layout.predict_view, null);
 
         adapter.add(multiSensorsView, "MultiSensors");
+        adapter.add(predictView, "Predict");
         viewPager.setAdapter(adapter);
     }
 
@@ -173,8 +176,14 @@ public class MainActivity extends AppCompatActivity {
                             else {
                                 txvResult.setText("You haven't choose the sensors!");
                             }
-
-
+                        }
+                    });
+                    break;
+                case 2:
+                    Button predictbtn = (Button) findViewById(R.id.predictbtn);
+                    predictbtn.setOnClickListener(new View.OnClickListener() {
+                        public void onClick(View view) {
+                            MultiSensors.startPredict = true;
                         }
                     });
                     break;

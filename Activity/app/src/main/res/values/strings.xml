@@ -51,13 +51,12 @@
         <!--<item>Heart Rate BPM</item>-->
         <!--<item>Calories</item>-->
     </string-array>
-
     <string-array name="activity">
-        <item>Still</item>
-        <item>Walking</item>
-        <item>Running</item>
         <item>Biking</item>
         <item>In Vehicle</item>
+        <item>Running</item>
+        <item>Still</item>
         <item>Tilting</item>
+        <item>Walking</item>
     </string-array>
 </resources>

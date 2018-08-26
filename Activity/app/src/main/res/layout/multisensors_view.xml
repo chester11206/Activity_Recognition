@@ -118,38 +118,6 @@
                     <!--android:text="Test1"/>-->
             </LinearLayout>
         </LinearLayout>
-        <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-            xmlns:tools="http://schemas.android.com/tools"
-            android:id="@+id/predict_display"
-            android:orientation="horizontal"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingBottom="@dimen/activity_vertical_margin"
-            android:paddingTop="@dimen/activity_vertical_margin">
-            <Button
-                android:id="@+id/predictbtn"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Predict" />
-            <TextView
-                android:id="@+id/predictView"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:scrollbars="vertical"
-                android:textSize="17dp"
-                android:ems="10"/>
-        </LinearLayout>
-
-
-
-
-        <!--<TextView-->
-            <!--android:id="@+id/acceView"-->
-            <!--android:layout_width="wrap_content"-->
-            <!--android:layout_height="wrap_content"-->
-            <!--android:scrollbars="vertical"-->
-            <!--android:layout_below="@id/stepView"-->
-            <!--android:textSize="17dp" />-->
     </LinearLayout>
 
 </ScrollView>

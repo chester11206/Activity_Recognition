@@ -53,6 +53,7 @@ dependencies {
     implementation "org.tensorflow:tensorflow-lite:+"
     implementation 'com.google.firebase:firebase-core:16.0.1'
     implementation 'com.google.firebase:firebase-ml-model-interpreter:16.2.0'
+    implementation 'org.tensorflow:tensorflow-android:+'
 }
 
 apply plugin: 'com.google.gms.google-services'
