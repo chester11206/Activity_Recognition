@@ -12,7 +12,7 @@ public class ActivityInference {
 
     private static ActivityInference activityInferenceInstance;
     private TensorFlowInferenceInterface inferenceInterface;
-    private static final String MODEL_FILE = "file:///android_asset/ActivityCNNopt.pb";
+    private static final String MODEL_FILE = "file:///android_asset/ActivityCNNopt3.pb";
     private static final String INPUT_NODE = "input_x";
     private static final String[] OUTPUT_NODES = {"prediction"};
     private static final String OUTPUT_NODE = "prediction";

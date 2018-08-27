@@ -162,6 +162,17 @@ def write_data(raw_data):
 
     return new_data
 
+def feature_normalize(dataset):
+
+	for i in range(0, num_channels):
+		mu = np.mean(dataset[:,range(i,dataset.shape[1],num_channels)].flatten(),axis = 0)
+		sigma = np.std(dataset[:,range(i,dataset.shape[1],num_channels)].flatten(),axis = 0)
+		for j in range(i,dataset.shape[1],num_channels):
+			temp = (dataset[:,j] - mu)/sigma
+			dataset[:,j] = temp
+
+	return dataset
+
 def getXY(all_dataset):
 
     dataNum = all_dataset.shape[0]
@@ -343,7 +354,10 @@ all_dataset = write_data(labeled_data)
 # X: shape=[data_num, input_height*input_width*num_channels]
 # trainY: shape=[train_num, num_labels]
 # testY: shape=[test_num, num_labels]
-new_dataset, trainNum, trainY, testY = getXY(all_dataset)
+beforenorm_dataset, trainNum, trainY, testY = getXY(all_dataset)
+
+# feature normalize
+new_dataset = feature_normalize(beforenorm_dataset)
 
 print (new_dataset.shape)
 
