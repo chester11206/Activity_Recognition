@@ -23,26 +23,27 @@ firebase_admin.initialize_app(cred, {
 })
 
 # About save path
-csv_folder_name = os.path.join(home, "Activity_Source/Datas")
+csv_folder_name = os.path.join(home, "Activity_Source/Data")
 csv_file_name = "rawData"
 
-model_folder_name = os.path.join(home, "Activity_Source/Models/model")
+model_folder_name = os.path.join(home, "Activity_Source/Model/model")
 model_file_name = "ActivityCNN"
 
-model_info_file_name = os.path.join(home, "Activity_Source/Models/model_info.csv")
+model_info_file_name = os.path.join(home, "Activity_Source/Model/model_info.csv")
 model_info_type = ["Index", "Test Accuracy", "Input Width", "Batch Size", "Epoch", "Kernel Size", "Depth", "Dense Size", "Model Layer"]
-layer_info = "(depthConv + BatchNormarlization)*2 + (Dense + BatchNormarlization)*6"
+layer_info = "(depthConv + BatchNormarlization)*2 + (Dense + BatchNormarlization)*6, no normalize, no acceZ"
 class_type = ["Biking", "In Vehicle", "Running", "Still", "Tilting", "Walking", "Features"]
 
 # About ML
 input_height = 1
-input_width = 250
-num_channels = 6
+input_width = 400
+num_channels = 5
 num_labels = 6
+feature_list = [6,7,9,10,11]
 
 kernel_size = [30,20]
 depth = [16,8]
-dense_size = [256,256,num_labels]
+dense_size = [256,128,num_labels]
 num_hidden = 256
 
 learning_rate = 0.0001
@@ -119,6 +120,7 @@ def write_data(raw_data):
 
 def label_rawData(npdata):
 
+    npdata = np.delete(npdata,8,1)
     new_npdata = []
     if npdata.size != 0:
         activity_base = npdata[0, :num_labels]
@@ -285,16 +287,27 @@ def write_model(sess, frozen_graphdef):
 
 def write_result(test_accuracy):
     global model_folder_name
+    global model_file_name
     global model_info_file_name
     global batch_size
     global epoch_num
     global layer_info
 
-    # **Write model information to csv
+    # **Models
+    # make new models folder
     i = 0
     while os.path.exists(model_folder_name + str(i)):
         i += 1
+    # model_path = model_folder_name + str(i-1)
 
+    # model_path = os.path.join(model_path, model_file_name)
+    # tflite_path = model_path + str(i-1) + ".tflite"
+
+    # save model
+    # tflite
+    # open(tflite_path, "wb").write(tflite_model)
+
+    # **Write model information to csv
     minfo = [i-1, test_accuracy, input_width, batch_size, epoch_num, kernel_size, depth, dense_size, layer_info]
     if not os.path.exists(model_info_file_name):
         model_info_file = open(model_info_file_name, "w")
@@ -408,9 +421,9 @@ for i in range(len(kernel_size)):
             channels = channels * depth[j]
     depth_conv = apply_depthwise_conv(depth_conv,kernel_size[i],channels,depth[i])
 
-    axes=[d for d in range(len(depth_conv.get_shape()))]
-    x_mean,x_variance=tf.nn.moments(depth_conv,axes)
-    depth_conv=tf.nn.batch_normalization(depth_conv,x_mean,x_variance,beta,gamma,1e-10,"bn")
+    # axes=[d for d in range(len(depth_conv.get_shape()))]
+    # x_mean,x_variance=tf.nn.moments(depth_conv,axes)
+    # depth_conv=tf.nn.batch_normalization(depth_conv,x_mean,x_variance,beta,gamma,1e-10,"bn")
 
     #depth_conv=max_pool = apply_max_pool(depth_conv,20,2)
 
@@ -420,9 +433,9 @@ logits = tf.reshape(depth_conv, [-1, shape_conv[1] * shape_conv[2] * shape_conv[
 for i in range(len(dense_size)):
     logits = tf.layers.dense(inputs=logits, units=dense_size[i], activation=tf.nn.relu)
 
-    axes=[d for d in range(len(logits.get_shape()))]
-    x_mean,x_variance=tf.nn.moments(logits,axes)
-    logits=tf.nn.batch_normalization(logits,x_mean,x_variance,beta,gamma,1e-10,"bn")
+    # axes=[d for d in range(len(logits.get_shape()))]
+    # x_mean,x_variance=tf.nn.moments(logits,axes)
+    # logits=tf.nn.batch_normalization(logits,x_mean,x_variance,beta,gamma,1e-10,"bn")
 
 shape_logits = logits.get_shape().as_list()
 # dense1 = tf.layers.dense(inputs=depth_conv, units=1024, activation=tf.nn.relu)
@@ -478,6 +491,10 @@ with tf.Session(config=config) as sess:
     frozen_graphdef = tf.graph_util.convert_variables_to_constants(sess, sess.graph_def, list(map(canonical_name, frozen_tensors)))
     # save ckpt & pb, return pb path
     frozen_graphdef_path = write_model(sess,frozen_graphdef)
+
+    # converter = tf.contrib.lite.TocoConverter.from_frozen_graph(frozen_graphdef_path, ["input_x"], ["prediction"])
+    # tflite_model = converter.convert()
+    # write_result(tflite_model, test_accuracy)
     write_result(test_accuracy)
 
     # converter = tf.contrib.lite.TocoConverter.from_frozen_graph(frozen_graphdef, ["input_x"], ["prediction"])

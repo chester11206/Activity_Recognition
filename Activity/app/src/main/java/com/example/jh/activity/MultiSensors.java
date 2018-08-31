@@ -185,16 +185,31 @@ public class MultiSensors {
                 startPredict = true;
             }
         });
-
-        Button stopbtn = (Button) context.findViewById(R.id.stopbtn);
-        stopbtn.setOnClickListener(new View.OnClickListener() {
+        Button stopUploadbtn = (Button) context.findViewById(R.id.stopUploadbtn);
+        stopUploadbtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View view) {
-                if (mSensorManager != null) {
-                    mSensorManager.unregisterListener(mSensorEventListener);
-                }
-                txvResult.append("\nStop!");
+                startUpload = false;
+                txvResult.append("\nStop Upload!");
             }
         });
+        Button stopPredictbtn = (Button) context.findViewById(R.id.stopPredictbtn);
+        stopPredictbtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View view) {
+                startPredict = false;
+                last_activity = null;
+                predicttxv.append("\nStop Predict");
+            }
+        });
+
+//        Button stopbtn = (Button) context.findViewById(R.id.stopbtn);
+//        stopbtn.setOnClickListener(new View.OnClickListener() {
+//            public void onClick(View view) {
+//                if (mSensorManager != null) {
+//                    mSensorManager.unregisterListener(mSensorEventListener);
+//                }
+//                txvResult.append("\nStop!");
+//            }
+//        });
 
         sensorStart();
     }
@@ -251,7 +266,6 @@ public class MultiSensors {
                         String ra = real_activity;
                         startNum = acceNum - uploadWait;
                         stopNum = acceNum;
-                        txvResult.setText("Num: " + startNum + " to " + stopNum + " " + "Upload Num: " + dataNum);
 
 //                        Map<String, Float> SensorData = new LinkedHashMap<String, Float>();
 //                        float [] predictData = new float[input_width * channels];
@@ -279,9 +293,8 @@ public class MultiSensors {
                             }
                             mDatabase.child("SensorDataSet").push().setValue(SensorData);
                         }
-//                        if (startPredict) {
-//                            activityPrediction(predictData);
-//                        }
+
+                        txvResult.setText("Num: " + startNum + " to " + stopNum + " " + "Upload Num: " + dataNum);
                         startUpload_acce = false;
                         startUpload_gyro = false;
                         sensorStart();
@@ -292,10 +305,10 @@ public class MultiSensors {
                         for (int i = 0; i < input_width; i++) {
                             predictData[i * channels + 0] = acceDataSet.get(predictTime * input_width + i).getAccelerometerX();
                             predictData[i * channels + 1] = acceDataSet.get(predictTime * input_width + i).getAccelerometerY();
-                            predictData[i * channels + 2] = acceDataSet.get(predictTime * input_width + i).getAccelerometerZ();
-                            predictData[i * channels + 3] = gyroDataSet.get(predictTime * input_width + i).getGyroscopeX();
+                            //predictData[i * channels + 2] = acceDataSet.get(predictTime * input_width + i).getAccelerometerZ();
+                            predictData[i * channels + 2] = gyroDataSet.get(predictTime * input_width + i).getGyroscopeX();
                             predictData[i * channels + 3] = gyroDataSet.get(predictTime * input_width + i).getGyroscopeY();
-                            predictData[i * channels + 3] = gyroDataSet.get(predictTime * input_width + i).getGyroscopeZ();
+                            predictData[i * channels + 4] = gyroDataSet.get(predictTime * input_width + i).getGyroscopeZ();
                         }
                         activityPrediction(predictData);
                     }
@@ -339,18 +352,18 @@ public class MultiSensors {
                 maxIndex = i;
             }
         }
-//        predicttxv.setText("\n" + activityItems[0] + ": " + String.format("%.8f", results[0])
-//                + "\n" + activityItems[1] + ": " + String.format("%.8f", results[1])
-//                + "\n" + activityItems[2] + ": " + String.format("%.8f", results[2])
-//                + "\n" + activityItems[3] + ": " + String.format("%.8f", results[3])
-//                + "\n" + activityItems[4] + ": " + String.format("%.8f", results[4])
-//                + "\n" + activityItems[5] + ": " + String.format("%.8f", results[5])
-//                + "\n\nResult: " + activityItems[maxIndex] + " " + String.format("%.8f", results[maxIndex]));
-        if (!activityItems[maxIndex].equals(last_activity) || last_activity.equals(null)) {
-            DateFormat dateFormat = getDateTimeInstance();
-            predicttxv.append("\nTime: " + dateFormat.format(MainActivity.timeNow) + " Activity: " + activityItems[maxIndex]);
-        }
-        last_activity = activityItems[maxIndex];
+        predicttxv.setText("\n" + activityItems[0] + ": " + String.format("%.8f", results[0])
+                + "\n" + activityItems[1] + ": " + String.format("%.8f", results[1])
+                + "\n" + activityItems[2] + ": " + String.format("%.8f", results[2])
+                + "\n" + activityItems[3] + ": " + String.format("%.8f", results[3])
+                + "\n" + activityItems[4] + ": " + String.format("%.8f", results[4])
+                + "\n" + activityItems[5] + ": " + String.format("%.8f", results[5])
+                + "\n\nResult: " + activityItems[maxIndex] + " " + String.format("%.8f", results[maxIndex]));
+//        if (!activityItems[maxIndex].equals(last_activity) || last_activity.equals(null)) {
+//            DateFormat dateFormat = getDateTimeInstance();
+//            predicttxv.append("\nTime: " + dateFormat.format(MainActivity.timeNow) + " Activity: " + activityItems[maxIndex]);
+//        }
+//        last_activity = activityItems[maxIndex];
 
         startPredict_acce = false;
         startPredict_gyro = false;

@@ -11,18 +11,19 @@ public class ActivityInference {
     }
 
     public static int input_height = 1;
-    public static int input_width = 250;
-    public static int channels = 6;
+    public static int input_width = 400;
+    public static int channels = 5;
+    public static int num_label = 6;
 
     private static ActivityInference activityInferenceInstance;
     private TensorFlowInferenceInterface inferenceInterface;
-    //ActivityCNNopt41
+    //ActivityCNNopt10
     private static final String MODEL_FILE = "file:///android_asset/ActivityCNNopt.pb";
     private static final String INPUT_NODE = "input_x";
     private static final String[] OUTPUT_NODES = {"prediction"};
     private static final String OUTPUT_NODE = "prediction";
     private static final long[] INPUT_SIZE = {1,input_height,input_width,channels};
-    private static final int OUTPUT_SIZE = channels;
+    private static final int OUTPUT_SIZE = num_label;
     private static AssetManager assetManager;
 
     public static ActivityInference getInstance(final Context context)

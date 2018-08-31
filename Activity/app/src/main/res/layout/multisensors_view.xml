@@ -36,15 +36,10 @@
                 android:layout_height="wrap_content"
                 android:text="Upload" />
             <Button
-                android:id="@+id/predictbtn"
+                android:id="@+id/stopUploadbtn"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Predict" />
-            <Button
-                android:id="@+id/stopbtn"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Stop" />
+                android:text="Stop Upload" />
         </LinearLayout>
         <TextView
             android:id="@+id/multisensorstxView"
@@ -125,6 +120,22 @@
                 <!--android:textSize="15dp"-->
                 <!--android:text="Test1"/>-->
             </LinearLayout>
+        </LinearLayout>
+        <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+            xmlns:tools="http://schemas.android.com/tools"
+            android:orientation="horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+            <Button
+                android:id="@+id/predictbtn"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Predict" />
+            <Button
+                android:id="@+id/stopPredictbtn"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Stop Predict" />
         </LinearLayout>
         <TextView
             android:id="@+id/predict_txView"
