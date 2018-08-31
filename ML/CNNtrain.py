@@ -23,32 +23,33 @@ firebase_admin.initialize_app(cred, {
 })
 
 # About save path
-csv_folder_name = os.path.join(home, "Activity_Source/Data")
+csv_folder_name = os.path.join(home, "Activity_Source/Datas")
 csv_file_name = "rawData"
 
-model_folder_name = os.path.join(home, "Activity_Source/Model/model")
+model_folder_name = os.path.join(home, "Activity_Source/Models/model")
 model_file_name = "ActivityCNN"
 
-model_info_file_name = os.path.join(home, "Activity_Source/model_info.csv")
-model_info_type = ["Index", "Test Accuracy", "Batch Size", "Epoch", "Model Layer"]
-layer_info = "depthConv + maxPool + depthConv"
+model_info_file_name = os.path.join(home, "Activity_Source/Models/model_info.csv")
+model_info_type = ["Index", "Test Accuracy", "Input Width", "Batch Size", "Epoch", "Kernel Size", "Depth", "Dense Size", "Model Layer"]
+layer_info = "(depthConv + BatchNormarlization)*2 + (Dense + BatchNormarlization)*6"
 class_type = ["Biking", "In Vehicle", "Running", "Still", "Tilting", "Walking", "Features"]
 
 # About ML
 input_height = 1
-input_width = 450
+input_width = 250
 num_channels = 6
 num_labels = 6
 
-kernel_size = 40
-depth = 40
+kernel_size = [30,20]
+depth = [16,8]
+dense_size = [256,256,num_labels]
 num_hidden = 256
 
 learning_rate = 0.0001
-epoch_num = 2000
+epoch_num = 2500
 epoch_start = 0
 iters = 0
-batch_size = 128
+batch_size = 64
 perm_X = np.empty
 perm_Y = np.empty
 
@@ -72,48 +73,6 @@ def get_firebase():
     npdata = npdata[:data_num,:]
 
     return npdata
-
-def label_rawData(npdata):
-
-    new_npdata = []
-    if npdata.size != 0:
-        activity_base = npdata[0, :num_labels]
-        idx_base = 0
-        for i in activity_base:
-            if int(i) == 1:
-                break
-            else:
-                idx_base+=1
-
-        for i in range(0, npdata.shape[0]):
-            activity_temp = npdata[i, :num_labels]
-            idx_temp = 0
-            for act in activity_temp:
-                if int(act) == 1:
-                    break
-                else:
-                    idx_temp+=1
-
-            if (i+1)%input_width == 0:
-                temp_data_last = npdata[i+1-input_width:i+1, num_labels:-1].flatten()
-                temp_data_last = np.hstack((activity_temp, temp_data_last))
-                new_npdata.append(temp_data_last)
-
-            if idx_temp != idx_base:
-                if i%timestep_size != 0:
-                    temp_data_last = npdata[i-input_width:i, num_labels:-1].flatten()
-                    temp_data_last = np.hstack((activity_base, temp_data_last))
-                    new_npdata.append(temp_data_last)
-                if i+timestep_size <= data_num:
-                    temp_data_next = npdata[i:i+input_width, num_labels:-1].flatten()
-                    temp_data_next = np.hstack((activity_temp, temp_data_next))
-                    new_npdata.append(temp_data_next)
-
-                idx_base = idx_temp
-                activity_base = activity_temp
-
-    new_npdata = np.array(new_npdata)
-    return new_npdata
 
 def write_data(raw_data):
     global csv_folder_name
@@ -156,22 +115,50 @@ def write_data(raw_data):
     new_data = list(csv.reader(open(csv_path,'r')))
     new_data = np.array(new_data[1:]).astype(float)
 
-    # clean firebase
-    root = db.reference()
-    root.child('SensorDataSet').delete()
-
     return new_data
 
-def feature_normalize(dataset):
+def label_rawData(npdata):
 
-	for i in range(0, num_channels):
-		mu = np.mean(dataset[:,range(i,dataset.shape[1],num_channels)].flatten(),axis = 0)
-		sigma = np.std(dataset[:,range(i,dataset.shape[1],num_channels)].flatten(),axis = 0)
-		for j in range(i,dataset.shape[1],num_channels):
-			temp = (dataset[:,j] - mu)/sigma
-			dataset[:,j] = temp
+    new_npdata = []
+    if npdata.size != 0:
+        activity_base = npdata[0, :num_labels]
+        idx_base = 0
+        for i in activity_base:
+            if int(i) == 1:
+                break
+            else:
+                idx_base+=1
 
-	return dataset
+        data_num = npdata.shape[0]
+        for i in range(0, data_num):
+            activity_temp = npdata[i, :num_labels]
+            idx_temp = 0
+            for act in activity_temp:
+                if int(act) == 1:
+                    break
+                else:
+                    idx_temp+=1
+
+            if (i+1)%input_width == 0:
+                temp_data_last = npdata[i+1-input_width:i+1, num_labels:-1].flatten()
+                temp_data_last = np.hstack((activity_temp, temp_data_last))
+                new_npdata.append(temp_data_last)
+
+            if idx_temp != idx_base:
+                if i%input_width != 0:
+                    temp_data_last = npdata[i-input_width:i, num_labels:-1].flatten()
+                    temp_data_last = np.hstack((activity_base, temp_data_last))
+                    new_npdata.append(temp_data_last)
+                if i+input_width <= data_num:
+                    temp_data_next = npdata[i:i+input_width, num_labels:-1].flatten()
+                    temp_data_next = np.hstack((activity_temp, temp_data_next))
+                    new_npdata.append(temp_data_next)
+
+                idx_base = idx_temp
+                activity_base = activity_temp
+
+    new_npdata = np.array(new_npdata)
+    return new_npdata
 
 def getXY(all_dataset):
 
@@ -180,6 +167,8 @@ def getXY(all_dataset):
     all_dataset = all_dataset[permutation, :]
 
     trainNum = int(dataNum*train_p)
+    print (class_type)
+    print (np.sum(all_dataset[:,:num_labels], axis=0))
     trainY = all_dataset[:trainNum, :num_labels].astype(int)
     testY = all_dataset[trainNum:,:num_labels].astype(int)
     allX = all_dataset[:, num_labels:]
@@ -194,30 +183,21 @@ def getXY(all_dataset):
 
     return allX, trainNum, trainY, testY
 
-# ML layer
-def weight_variable(shape):
-    initial = tf.truncated_normal(shape, stddev = 0.1)
-    return tf.Variable(initial)
+def feature_normalize(dataset):
 
-def bias_variable(shape):
-    initial = tf.constant(0.0, shape = shape)
-    return tf.Variable(initial)
-    
-def apply_depthwise_conv(x,kernel_size,num_channels,depth):
-    weights = weight_variable([1, kernel_size, num_channels, depth])
-    biases = bias_variable([depth * num_channels])
+    for i in range(0, num_channels):
+        mu = np.mean(dataset[:,range(i,dataset.shape[1],num_channels)].flatten(),axis = 0)
+        sigma = np.std(dataset[:,range(i,dataset.shape[1],num_channels)].flatten(),axis = 0)
+        for j in range(i,dataset.shape[1],num_channels):
+            temp = (dataset[:,j] - mu)/sigma
+            dataset[:,j] = temp
 
-    # filter = weigths, shape=[filter_height, filter_width, in_channels, channel_multiplier]
-    #                  =[1, kernel_size, num_channels, depth]
-    # output_channels = in_channels * channel_multiplier
-    output_conv = tf.nn.depthwise_conv2d(x,weights, [1, 1, 1, 1], padding='VALID')
+    return dataset
 
-    return tf.nn.relu(tf.add(output_conv,biases))
-    
-def apply_max_pool(x,kernel_size,stride_size):
-    return tf.nn.max_pool(x, ksize=[1, 1, kernel_size, 1], 
-                          strides=[1, 1, stride_size, 1], padding='VALID')
-
+# clean firebase
+def remove_firebase():
+    root = db.reference()
+    root.child('SensorDataSet').delete()
 
 # Run Batch
 def next_batch(X_train, Y_train, num, start):
@@ -293,7 +273,7 @@ def write_model(sess, frozen_graphdef):
         input_graph_def.ParseFromString(data)
 
     output_graph_def = optimize_for_inference_lib.optimize_for_inference(
-            frozen_graphdef,
+            input_graph_def,
             ["input_x"], 
             ["prediction"],
             tf.float32.as_datatype_enum)
@@ -303,13 +283,32 @@ def write_model(sess, frozen_graphdef):
 
     return pb_path
 
-def write_result(tflite_model, test_accuracy):
+def write_result(test_accuracy):
     global model_folder_name
-    global model_file_name
     global model_info_file_name
     global batch_size
     global epoch_num
     global layer_info
+
+    # **Write model information to csv
+    i = 0
+    while os.path.exists(model_folder_name + str(i)):
+        i += 1
+
+    minfo = [i-1, test_accuracy, input_width, batch_size, epoch_num, kernel_size, depth, dense_size, layer_info]
+    if not os.path.exists(model_info_file_name):
+        model_info_file = open(model_info_file_name, "w")
+        model_info_w = csv.writer(model_info_file)
+        model_info_w.writerow(model_info_type)
+        model_info_w.writerow(minfo)
+    else:
+        model_info_file = open(model_info_file_name, "a")
+        model_info_w = csv.writer(model_info_file)
+        model_info_w.writerow(minfo)
+
+def write_tfite(tflite_modely):
+    global model_folder_name
+    global model_file_name
 
     # **Models
     # make new models folder
@@ -325,17 +324,28 @@ def write_result(tflite_model, test_accuracy):
     # tflite
     open(tflite_path, "wb").write(tflite_model)
 
-    # **Write model information to csv
-    minfo = [i, test_accuracy, batch_size, epoch_num, layer_info]
-    if not os.path.exists(model_info_file_name):
-        model_info_file = open(model_info_file_name, "w")
-        model_info_w = csv.writer(model_info_file)
-        model_info_w.writerow(model_info_type)
-        model_info_w.writerow(minfo)
-    else:
-        model_info_file = open(model_info_file_name, "a")
-        model_info_w = csv.writer(model_info_file)
-        model_info_w.writerow(minfo)
+# ML layer
+def weight_variable(shape):
+    initial = tf.truncated_normal(shape, stddev = 0.1)
+    return tf.Variable(initial)
+
+def bias_variable(shape):
+    initial = tf.constant(0.0, shape = shape)
+    return tf.Variable(initial)
+    
+def apply_depthwise_conv(x,kernel_size,num_channels,depth):
+    weights = weight_variable([1, kernel_size, num_channels, depth])
+    biases = bias_variable([depth * num_channels])
+
+    # filter = weigths, shape=[filter_height, filter_width, in_channels, channel_multiplier]
+    #                  =[1, kernel_size, num_channels, depth]
+    # output_channels = in_channels * channel_multiplier
+    output_conv = tf.nn.depthwise_conv2d(x,weights, [1, 1, 1, 1], padding='VALID')
+
+    return tf.nn.relu(tf.add(output_conv,biases))
+    
+def apply_max_pool(x,kernel_size,stride_size):
+    return tf.layers.max_pooling2d(inputs=x, pool_size=[1, kernel_size], strides=stride_size)
 
 
 #######################
@@ -344,20 +354,20 @@ def write_result(tflite_model, test_accuracy):
 # Read raw data, shape=[rawData_num, num_channels+num_labels+1]=[-1,13]
 raw_data = get_firebase()
 
-# label raw data, shape=[data_num, input_width*num_channels+num_labels]=[-1,2706]
-labeled_data = label_rawData(raw_data)
-
 # combine old data and save, shape=[data_num, input_width*num_channels+num_labels]=[-1,2706]
-all_dataset = write_data(labeled_data)
+all_data = write_data(raw_data)
+
+# label raw data, shape=[data_num, input_width*num_channels+num_labels]=[-1,2706]
+labeled_data = label_rawData(all_data)
 
 # seperate X, Y
 # X: shape=[data_num, input_height*input_width*num_channels]
 # trainY: shape=[train_num, num_labels]
 # testY: shape=[test_num, num_labels]
-beforenorm_dataset, trainNum, trainY, testY = getXY(all_dataset)
+new_dataset, trainNum, trainY, testY = getXY(labeled_data)
 
 # feature normalize
-new_dataset = feature_normalize(beforenorm_dataset)
+# new_dataset = feature_normalize(beforenorm_dataset)
 
 print (new_dataset.shape)
 
@@ -371,6 +381,8 @@ print (trainY.shape)
 print (testX.shape)
 print (testY.shape)
 
+remove_firebase()
+
 
 #############
 # **Build CNN
@@ -380,20 +392,54 @@ Y = tf.placeholder(tf.float32, shape=[None,num_labels], name="input_y")
 
 X = tf.reshape(X_, [-1,input_height,input_width,num_channels])
 
-depth_conv = apply_depthwise_conv(X,kernel_size,num_channels,depth)
-max_pool = apply_max_pool(depth_conv,20,2)
-depth_conv = apply_depthwise_conv(max_pool,6,depth*num_channels,depth//10)
+# depth_conv = apply_depthwise_conv(X,kernel_size,num_channels,depth)
+# max_pool = apply_max_pool(depth_conv,20,2)
+# depth_conv = apply_depthwise_conv(max_pool,6,depth*num_channels,depth//10)
 
-shape = depth_conv.get_shape().as_list()
-c_flat = tf.reshape(depth_conv, [-1, shape[1] * shape[2] * shape[3]])
+beta= tf.get_variable("beta",shape=[],initializer=tf.constant_initializer(0.0))
+gamma=tf.get_variable("gamma",shape=[],initializer=tf.constant_initializer(1.0))
 
-f_weights_l1 = weight_variable([shape[1] * shape[2] * depth * num_channels * (depth//10), num_hidden])
-f_biases_l1 = bias_variable([num_hidden])
-f = tf.nn.tanh(tf.add(tf.matmul(c_flat, f_weights_l1),f_biases_l1))
 
-out_weights = weight_variable([num_hidden, num_labels])
-out_biases = bias_variable([num_labels])
-Y_pre = tf.nn.softmax(tf.matmul(f, out_weights) + out_biases, name = "prediction")
+depth_conv = X
+for i in range(len(kernel_size)):
+    channels = num_channels
+    if i > 0:
+        for j in range(i):
+            channels = channels * depth[j]
+    depth_conv = apply_depthwise_conv(depth_conv,kernel_size[i],channels,depth[i])
+
+    axes=[d for d in range(len(depth_conv.get_shape()))]
+    x_mean,x_variance=tf.nn.moments(depth_conv,axes)
+    depth_conv=tf.nn.batch_normalization(depth_conv,x_mean,x_variance,beta,gamma,1e-10,"bn")
+
+    #depth_conv=max_pool = apply_max_pool(depth_conv,20,2)
+
+shape_conv = depth_conv.get_shape().as_list()
+logits = tf.reshape(depth_conv, [-1, shape_conv[1] * shape_conv[2] * shape_conv[3]])
+
+for i in range(len(dense_size)):
+    logits = tf.layers.dense(inputs=logits, units=dense_size[i], activation=tf.nn.relu)
+
+    axes=[d for d in range(len(logits.get_shape()))]
+    x_mean,x_variance=tf.nn.moments(logits,axes)
+    logits=tf.nn.batch_normalization(logits,x_mean,x_variance,beta,gamma,1e-10,"bn")
+
+shape_logits = logits.get_shape().as_list()
+# dense1 = tf.layers.dense(inputs=depth_conv, units=1024, activation=tf.nn.relu)
+# dense2= tf.layers.dense(inputs=dense1, units=512, activation=tf.nn.relu)
+# logits= tf.layers.dense(inputs=dense2, units=256, activation=None)
+
+# shape = logits.get_shape().as_list()
+# c_flat = tf.reshape(logits, [-1, shape[1] * shape[2] * shape[3]])
+
+# f_weights_l1 = weight_variable([shape[1] * shape[2] * shape[3], num_hidden])
+# f_biases_l1 = bias_variable([num_hidden])
+# f = tf.nn.tanh(tf.add(tf.matmul(c_flat, f_weights_l1),f_biases_l1))
+
+# out_weights = weight_variable([num_hidden, num_labels])
+# out_biases = bias_variable([num_labels])
+# Y_pre = tf.nn.softmax(tf.matmul(f, out_weights) + out_biases, name = "prediction")
+Y_pre = tf.nn.softmax(logits, name = "prediction")
 
 loss = -tf.reduce_sum(Y * tf.log(Y_pre))
 optimizer = tf.train.GradientDescentOptimizer(learning_rate = learning_rate).minimize(loss)
@@ -413,7 +459,7 @@ config.gpu_options.allow_growth = True
 init = tf.global_variables_initializer()
 out = tf.identity(Y_pre, name="output")
 
-with tf.Session() as sess:
+with tf.Session(config=config) as sess:
     sess.run(init)
     for epoch in range(epoch_num):
         batch_X, batch_Y, epoch_start = next_batch(trainX, trainY, batch_size, epoch_start)
@@ -431,8 +477,9 @@ with tf.Session() as sess:
     frozen_tensors = [out]
     frozen_graphdef = tf.graph_util.convert_variables_to_constants(sess, sess.graph_def, list(map(canonical_name, frozen_tensors)))
     # save ckpt & pb, return pb path
-    frozen_graphdef_path = write_model(sess, frozen_graphdef)
+    frozen_graphdef_path = write_model(sess,frozen_graphdef)
+    write_result(test_accuracy)
 
-    converter = tf.contrib.lite.TocoConverter.from_frozen_graph(frozen_graphdef_path, ["input_x"], ["prediction"])
-    tflite_model = converter.convert()
-    write_result(tflite_model, test_accuracy)
+    # converter = tf.contrib.lite.TocoConverter.from_frozen_graph(frozen_graphdef, ["input_x"], ["prediction"])
+    # tflite_model = converter.convert()
+    # write_tflite(tflite_model)
