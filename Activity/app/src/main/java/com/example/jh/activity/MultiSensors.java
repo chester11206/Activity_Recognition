@@ -33,6 +33,7 @@ import com.google.firebase.ml.custom.FirebaseModelOutputs;
 import com.google.firebase.ml.custom.model.FirebaseCloudModelSource;
 import com.google.firebase.ml.custom.model.FirebaseModelDownloadConditions;
 
+import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
@@ -40,6 +41,8 @@ import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
+import static java.text.DateFormat.getDateTimeInstance;
 
 public class MultiSensors {
     public Activity context;
@@ -54,11 +57,21 @@ public class MultiSensors {
     private SensorManager mSensorManager;
 
     private String [] activityItems = null;
-    private String real_activity = "Still";
+    private String real_activity = null;
+    private String last_activity = null;
 
-    public static boolean startPredict = false;
+    private boolean startPredict = false;
+    private boolean startUpload = false;
     private boolean startListen_acce = false;
     private boolean startListen_gyro = false;
+    private boolean startUpload_acce = false;
+    private boolean startUpload_gyro = false;
+    private boolean startPredict_acce = false;
+    private boolean startPredict_gyro = false;
+
+    private int uploadWait = 2000;
+    private int input_width = ActivityInference.input_width;
+    private int channels = ActivityInference.channels;
 
     private List<acceData> acceDataSet = new ArrayList<acceData>();
     private List<gyroData> gyroDataSet = new ArrayList<gyroData>();
@@ -84,13 +97,13 @@ public class MultiSensors {
         private float accelerometerY = 0;
         private float accelerometerZ = 0;
         private long TimeNow;
-        private String real_activit;
+        private String real_activity;
 
         public acceData(float aX, float aY, float aZ, String ra) {
             accelerometerX = aX;
             accelerometerY = aY;
             accelerometerZ = aZ;
-            real_activity = ra;
+            this.real_activity = ra;
             Calendar cal = Calendar.getInstance();
             Date now = new Date();
             cal.setTime(now);
@@ -100,7 +113,7 @@ public class MultiSensors {
         public float getAccelerometerY() {return accelerometerY;}
         public float getAccelerometerZ() {return accelerometerZ;}
         public long getTimeNow() {return TimeNow;}
-        public String getReal_activity() {return real_activity;}
+        public String getReal_activity() {return this.real_activity;}
     }
 
     @IgnoreExtraProperties
@@ -109,8 +122,7 @@ public class MultiSensors {
         private float gyroscopeY = 0;
         private float gyroscopeZ = 0;
 
-        public gyroData() {}
-        public void setGyroscope(float gX, float gY, float gZ) {
+        public gyroData (float gX, float gY, float gZ) {
             gyroscopeX = gX;
             gyroscopeY = gY;
             gyroscopeZ = gZ;
@@ -126,13 +138,13 @@ public class MultiSensors {
         activityItems = context.getResources().getStringArray(R.array.activity);
         mDatabase = FirebaseDatabase.getInstance().getReference();
 
+        RadioGroup rg = (RadioGroup)context.findViewById(R.id.radioGroup);
+        rg.setOnCheckedChangeListener(rglistener);
+
         txvResult = (TextView) this.context.findViewById(R.id.multisensorstxView);
         txvResult.setMovementMethod(new ScrollingMovementMethod());
         predicttxv = (TextView) this.context.findViewById(R.id.predict_txView);
         predicttxv.setMovementMethod(new ScrollingMovementMethod());
-
-        RadioGroup rg = (RadioGroup)context.findViewById(R.id.radioGroup);
-        rg.setOnCheckedChangeListener(rglistener);
 
         this.mSensorManager = SensorManager;
         for (String sensor : sensors_list) {
@@ -140,7 +152,7 @@ public class MultiSensors {
             TextView txv = new TextView(context);
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
 
-            txv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 17);
+            txv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
             txv.setMovementMethod(new ScrollingMovementMethod());
             txv.setLayoutParams(params);
             ll.addView(txv);
@@ -153,11 +165,15 @@ public class MultiSensors {
 
         activityInference = new ActivityInference(context);
 
-        Button stopbtn = (Button) context.findViewById(R.id.stopbtn);
-        stopbtn.setOnClickListener(new View.OnClickListener() {
+        Button uploadbtn = (Button) context.findViewById(R.id.uploadbtn);
+        uploadbtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View view) {
-                if (mSensorManager != null) {
-                    mSensorManager.unregisterListener(mSensorEventListener);
+                if (real_activity == null) {
+                    txvResult.setText("You haven't set the activity!");
+                }
+                else {
+                    txvResult.setText("Uploading...");
+                    startUpload = true;
                 }
             }
         });
@@ -165,7 +181,18 @@ public class MultiSensors {
         Button predictbtn = (Button) context.findViewById(R.id.predictbtn);
         predictbtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View view) {
+                predicttxv.setText("Predicting...");
                 startPredict = true;
+            }
+        });
+
+        Button stopbtn = (Button) context.findViewById(R.id.stopbtn);
+        stopbtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View view) {
+                if (mSensorManager != null) {
+                    mSensorManager.unregisterListener(mSensorEventListener);
+                }
+                txvResult.append("\nStop!");
             }
         });
 
@@ -184,7 +211,6 @@ public class MultiSensors {
                                      int checkedId) {
             RadioButton rb = (RadioButton) context.findViewById(checkedId);
             real_activity = rb.getText().toString();
-            txvResult.append("\n" + real_activity);
         }
 
     };
@@ -205,26 +231,31 @@ public class MultiSensors {
                                 + "\nX: " + event.values[0]
                                 + "\nY: " + event.values[1]
                                 + "\nZ: " + event.values[2]);
+
                         String ra = real_activity;
                         acceData acceData = new acceData(event.values[0], event.values[1], event.values[2], ra);
-
                         acceDataSet.add(acceData);
                         acceNum++;
 
-                        if (acceNum % 450 == 0) {
+                        if (startUpload && acceNum % uploadWait == 0) {
                             startListen_acce = false;
+                            startUpload_acce = true;
+                        }
+                        if (startPredict && acceNum % input_width == 1 && acceNum > input_width) {
+                            startListen_acce = false;
+                            startPredict_acce = true;
                         }
                     }
-                    if (!startListen_acce && !startListen_gyro) {
+                    if (startUpload_acce && startUpload_gyro) {
                         dataNum++;
                         String ra = real_activity;
-                        startNum = stopNum;
+                        startNum = acceNum - uploadWait;
                         stopNum = acceNum;
-                        txvResult.setText("\nNum: " + startNum + " to " + stopNum + " " + "Activity: " + ra + "\nDataNum: " + dataNum);
+                        txvResult.setText("Num: " + startNum + " to " + stopNum + " " + "Upload Num: " + dataNum);
 
 //                        Map<String, Float> SensorData = new LinkedHashMap<String, Float>();
-                        float [] predictData = new float[2700];
-                        int predictNum = 0;
+//                        float [] predictData = new float[input_width * channels];
+//                        int predictNum = 0;
                         for (int i = startNum; i < stopNum; i++) {
                             Map<String, Float> SensorData = new LinkedHashMap<String, Float>();
                             SensorData.put("accelerometerX", acceDataSet.get(i).getAccelerometerX());
@@ -233,10 +264,10 @@ public class MultiSensors {
                             SensorData.put("gyroscopeX", gyroDataSet.get(i).getGyroscopeX());
                             SensorData.put("gyroscopeY", gyroDataSet.get(i).getGyroscopeY());
                             SensorData.put("gyroscopeZ", gyroDataSet.get(i).getGyroscopeZ());
-                            for (String key : SensorData.keySet()) {
-                                predictData[predictNum] = SensorData.get(key);
-                                predictNum += 1;
-                            }
+//                            for (String key : SensorData.keySet()) {
+//                                predictData[predictNum] = SensorData.get(key);
+//                                predictNum += 1;
+//                            }
                             SensorData.put("timeNow", (float)acceDataSet.get(i).getTimeNow());
 
                             for (String activity : activityItems) {
@@ -248,25 +279,45 @@ public class MultiSensors {
                             }
                             mDatabase.child("SensorDataSet").push().setValue(SensorData);
                         }
-                        if (startPredict) {
-                            activityPrediction(predictData);
-                        }
+//                        if (startPredict) {
+//                            activityPrediction(predictData);
+//                        }
+                        startUpload_acce = false;
+                        startUpload_gyro = false;
                         sensorStart();
+                    }
+                    if (startPredict_acce && startPredict_gyro) {
+                        float[] predictData = new float[input_width * channels];
+                        int predictTime = acceNum / input_width - 1;
+                        for (int i = 0; i < input_width; i++) {
+                            predictData[i * channels + 0] = acceDataSet.get(predictTime * input_width + i).getAccelerometerX();
+                            predictData[i * channels + 1] = acceDataSet.get(predictTime * input_width + i).getAccelerometerY();
+                            predictData[i * channels + 2] = acceDataSet.get(predictTime * input_width + i).getAccelerometerZ();
+                            predictData[i * channels + 3] = gyroDataSet.get(predictTime * input_width + i).getGyroscopeX();
+                            predictData[i * channels + 3] = gyroDataSet.get(predictTime * input_width + i).getGyroscopeY();
+                            predictData[i * channels + 3] = gyroDataSet.get(predictTime * input_width + i).getGyroscopeZ();
+                        }
+                        activityPrediction(predictData);
                     }
                     break;
                 case Sensor.TYPE_GYROSCOPE:
                     if (startListen_gyro) {
-                        txv.setText("\nGyroscope"
+                        txv.setText("Gyroscope"
                                 + "\nX: " + event.values[0]
                                 + "\nY: " + event.values[1]
                                 + "\nZ: " + event.values[2]);
-                        gyroData gyroData = new gyroData();
-                        gyroData.setGyroscope(event.values[0], event.values[1], event.values[2]);
+
+                        gyroData gyroData = new gyroData(event.values[0], event.values[1], event.values[2]);
                         gyroDataSet.add(gyroData);
                         gyroNum++;
 
-                        if (gyroNum % 450 == 0) {
+                        if (startUpload && gyroNum % uploadWait == 0) {
                             startListen_gyro = false;
+                            startUpload_gyro = true;
+                        }
+                        if (startPredict && gyroNum % input_width == 1 && gyroNum > input_width) {
+                            startListen_gyro = false;
+                            startPredict_gyro = true;
                         }
                     }
                     break;
@@ -288,12 +339,21 @@ public class MultiSensors {
                 maxIndex = i;
             }
         }
-        predicttxv.setText("\n" + activityItems[0] + ": " + String.format("%.8f", results[0])
-                + "\n\n" + activityItems[1] + ": " + String.format("%.8f", results[1])
-                + "\n\n" + activityItems[2] + ": " + String.format("%.8f", results[2])
-                + "\n\n" + activityItems[3] + ": " + String.format("%.8f", results[3])
-                + "\n\n" + activityItems[4] + ": " + String.format("%.8f", results[4])
-                + "\n\n" + activityItems[5] + ": " + String.format("%.8f", results[5])
-                + "\n\nResult: " + activityItems[maxIndex] + " " + String.format("%.8f", results[maxIndex]));
+//        predicttxv.setText("\n" + activityItems[0] + ": " + String.format("%.8f", results[0])
+//                + "\n" + activityItems[1] + ": " + String.format("%.8f", results[1])
+//                + "\n" + activityItems[2] + ": " + String.format("%.8f", results[2])
+//                + "\n" + activityItems[3] + ": " + String.format("%.8f", results[3])
+//                + "\n" + activityItems[4] + ": " + String.format("%.8f", results[4])
+//                + "\n" + activityItems[5] + ": " + String.format("%.8f", results[5])
+//                + "\n\nResult: " + activityItems[maxIndex] + " " + String.format("%.8f", results[maxIndex]));
+        if (!activityItems[maxIndex].equals(last_activity) || last_activity.equals(null)) {
+            DateFormat dateFormat = getDateTimeInstance();
+            predicttxv.append("\nTime: " + dateFormat.format(MainActivity.timeNow) + " Activity: " + activityItems[maxIndex]);
+        }
+        last_activity = activityItems[maxIndex];
+
+        startPredict_acce = false;
+        startPredict_gyro = false;
+        sensorStart();
     }
 }

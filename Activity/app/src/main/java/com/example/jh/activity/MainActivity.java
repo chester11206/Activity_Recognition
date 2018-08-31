@@ -21,6 +21,8 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.TextView;
 
 import java.text.DateFormat;
@@ -50,6 +52,7 @@ public class MainActivity extends AppCompatActivity {
     boolean[] multiflags = new boolean[]{};//init multichoice = false
     String[] multiSensorItems = null;
     private List<String> multiSensors_list = new ArrayList<String>();
+
 
     private static final int msgKey1 = 1;
     private TextView mTime;
@@ -169,23 +172,18 @@ public class MainActivity extends AppCompatActivity {
                         public void onClick(View view) {
                             txvResult = (TextView) findViewById(R.id.multisensorstxView);
                             txvResult.setMovementMethod(new ScrollingMovementMethod());
-                            if (multiSensors_list.size() > 0){
-                                mSensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
-                                multiSensorsapi.start(context, mSensorManager, multiSensors_list);
+                            if (multiSensors_list.size() <= 0){
+                                txvResult.setText("You haven't choose the sensors!");
+
                             }
                             else {
-                                txvResult.setText("You haven't choose the sensors!");
+                                mSensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
+                                multiSensorsapi.start(context, mSensorManager, multiSensors_list);
                             }
                         }
                     });
                     break;
                 case 2:
-                    Button predictbtn = (Button) findViewById(R.id.predictbtn);
-                    predictbtn.setOnClickListener(new View.OnClickListener() {
-                        public void onClick(View view) {
-                            MultiSensors.startPredict = true;
-                        }
-                    });
                     break;
                 default:
                     break;
