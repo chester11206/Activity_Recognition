@@ -89,6 +89,10 @@ public class MultiSensors {
     private int startUploadNum = 0;
     private int startPredictNum = 0;
 
+    private int allPredictNum = 0;
+    private int rightPredictNum = 0;
+    private float test_accuracy = 0;
+
     public static final Map<Integer, TextView> textview_map = new LinkedHashMap<Integer, TextView>();
     public static final Map<String, Integer> sensorstype_map = createSensorsTypeMap();
     private static Map<String, Integer> createSensorsTypeMap()
@@ -162,7 +166,7 @@ public class MultiSensors {
             TextView txv = new TextView(context);
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
 
-            txv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 10);
+            txv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
             txv.setMovementMethod(new ScrollingMovementMethod());
             txv.setLayoutParams(params);
             ll.addView(txv);
@@ -192,8 +196,14 @@ public class MultiSensors {
         Button predictbtn = (Button) context.findViewById(R.id.predictbtn);
         predictbtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View view) {
-                predicttxv.setText("Predicting...");
-                startPredict = true;
+                if (real_activity == null) {
+                    predicttxv.setText("You haven't set the activity!");
+                }
+                else {
+                    predicttxv.setText("Predicting...");
+                    startPredict = true;
+                    startPredictNum = acceNum;
+                }
             }
         });
         Button stopUploadbtn = (Button) context.findViewById(R.id.stopUploadbtn);
@@ -272,7 +282,7 @@ public class MultiSensors {
 //                                + "\nX: " + event.values[0]
 //                                + "\nY: " + event.values[1]
 //                                + "\nZ: " + event.values[2]);
-                        txv.setText("\nAccelerometer"
+                        txv.setText("\nAccelerometer(Earth)"
                                 + "\nX: " + earthAcce[0]
                                 + "\nY: " + earthAcce[1]
                                 + "\nZ: " + earthAcce[2]);
@@ -417,13 +427,27 @@ public class MultiSensors {
                 maxIndex = i;
             }
         }
+        allPredictNum += 1;
+        if (activityItems[maxIndex].equals(real_activity)) {
+            rightPredictNum += 1;
+        }
+        test_accuracy = rightPredictNum / allPredictNum;
+
+        Map<String, String> activityAccuracy = new LinkedHashMap<String, String>();
+        activityAccuracy.put("Predict", activityItems[maxIndex]);
+        activityAccuracy.put("Ground Truth", real_activity);
+        mDatabase.child("TestAccuracy").push().setValue(activityAccuracy);
+
         predicttxv.setText("\n" + activityItems[0] + ": " + String.format("%.8f", results[0])
                 + "\n" + activityItems[1] + ": " + String.format("%.8f", results[1])
                 + "\n" + activityItems[2] + ": " + String.format("%.8f", results[2])
                 + "\n" + activityItems[3] + ": " + String.format("%.8f", results[3])
                 + "\n" + activityItems[4] + ": " + String.format("%.8f", results[4])
                 + "\n" + activityItems[5] + ": " + String.format("%.8f", results[5])
-                + "\n\nResult: " + activityItems[maxIndex] + " " + String.format("%.8f", results[maxIndex]));
+                + "\n\nResult: " + activityItems[maxIndex] + " " + String.format("%.8f", results[maxIndex])
+                + "\nTest Accuracy: " + String.format("%.8f", test_accuracy));
+
+
 //        if (!activityItems[maxIndex].equals(last_activity) || last_activity.equals(null)) {
 //            DateFormat dateFormat = getDateTimeInstance();
 //            predicttxv.append("\nTime: " + dateFormat.format(MainActivity.timeNow) + " Activity: " + activityItems[maxIndex]);
