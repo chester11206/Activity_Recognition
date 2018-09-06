@@ -42,9 +42,10 @@
     </string-array>
 
     <string-array name="multiSensors">
-        <item>Step</item>
         <item>Accelerometer</item>
         <item>Gyroscope</item>
+        <item>Gravity</item>
+        <item>Magnetic</item>
         <!--<item>Speed</item>-->
         <!--<item>Weight</item>-->
         <!--<item>Nutrition</item>-->

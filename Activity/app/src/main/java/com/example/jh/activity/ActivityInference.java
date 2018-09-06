@@ -12,12 +12,12 @@ public class ActivityInference {
 
     public static int input_height = 1;
     public static int input_width = 400;
-    public static int channels = 5;
+    public static int channels = 6;
     public static int num_label = 6;
 
     private static ActivityInference activityInferenceInstance;
     private TensorFlowInferenceInterface inferenceInterface;
-    //ActivityCNNopt10
+    //ActivityCNNopt5
     private static final String MODEL_FILE = "file:///android_asset/ActivityCNNopt.pb";
     private static final String INPUT_NODE = "input_x";
     private static final String[] OUTPUT_NODES = {"prediction"};

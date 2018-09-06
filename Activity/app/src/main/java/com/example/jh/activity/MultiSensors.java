@@ -62,8 +62,12 @@ public class MultiSensors {
 
     private boolean startPredict = false;
     private boolean startUpload = false;
+
     private boolean startListen_acce = false;
     private boolean startListen_gyro = false;
+    private boolean startListen_grav = false;
+    private boolean startListen_magn = false;
+
     private boolean startUpload_acce = false;
     private boolean startUpload_gyro = false;
     private boolean startPredict_acce = false;
@@ -75,11 +79,15 @@ public class MultiSensors {
 
     private List<acceData> acceDataSet = new ArrayList<acceData>();
     private List<gyroData> gyroDataSet = new ArrayList<gyroData>();
+    private float [] gravData = new float[3];
+    private float [] magnData = new float[3];
     private int acceNum = 0;
     private int gyroNum = 0;
     private int dataNum = 0;
     private int startNum = 0;
     private int stopNum = 0;
+    private int startUploadNum = 0;
+    private int startPredictNum = 0;
 
     public static final Map<Integer, TextView> textview_map = new LinkedHashMap<Integer, TextView>();
     public static final Map<String, Integer> sensorstype_map = createSensorsTypeMap();
@@ -88,6 +96,8 @@ public class MultiSensors {
         Map<String, Integer> myMap = new LinkedHashMap<String, Integer>();
         myMap.put("Accelerometer", Sensor.TYPE_ACCELEROMETER);
         myMap.put("Gyroscope", Sensor.TYPE_GYROSCOPE);
+        myMap.put("Gravity", Sensor.TYPE_GRAVITY);
+        myMap.put("Magnetic", Sensor.TYPE_MAGNETIC_FIELD);
         return myMap;
     }
 
@@ -152,7 +162,7 @@ public class MultiSensors {
             TextView txv = new TextView(context);
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
 
-            txv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
+            txv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 10);
             txv.setMovementMethod(new ScrollingMovementMethod());
             txv.setLayoutParams(params);
             ll.addView(txv);
@@ -174,6 +184,7 @@ public class MultiSensors {
                 else {
                     txvResult.setText("Uploading...");
                     startUpload = true;
+                    startUploadNum = acceNum;
                 }
             }
         });
@@ -217,6 +228,18 @@ public class MultiSensors {
     private void sensorStart() {
         startListen_acce = true;
         startListen_gyro = true;
+        startListen_grav = true;
+        startListen_magn = true;
+    }
+
+    private void uploadStop() {
+        startUpload_acce = false;
+        startUpload_gyro = false;
+    }
+
+    private void predictStop() {
+        startPredict_acce = false;
+        startPredict_gyro = false;
     }
 
     private RadioGroup.OnCheckedChangeListener rglistener = new RadioGroup.OnCheckedChangeListener(){
@@ -242,21 +265,32 @@ public class MultiSensors {
             switch (event.sensor.getType()) {
                 case Sensor.TYPE_ACCELEROMETER:
                     if (startListen_acce) {
+                        float [] earthAcce = new float[4];
+                        earthAcce = phone2earth(event);
+
+//                        txv.setText("\nAccelerometer"
+//                                + "\nX: " + event.values[0]
+//                                + "\nY: " + event.values[1]
+//                                + "\nZ: " + event.values[2]);
                         txv.setText("\nAccelerometer"
-                                + "\nX: " + event.values[0]
-                                + "\nY: " + event.values[1]
-                                + "\nZ: " + event.values[2]);
+                                + "\nX: " + earthAcce[0]
+                                + "\nY: " + earthAcce[1]
+                                + "\nZ: " + earthAcce[2]);
 
                         String ra = real_activity;
-                        acceData acceData = new acceData(event.values[0], event.values[1], event.values[2], ra);
+//                        acceData acceData = new acceData(event.values[0] - gravData[0]
+//                                , event.values[1] - gravData[1]
+//                                , event.values[2] - gravData[2]
+//                                , ra);
+                        acceData acceData = new acceData(earthAcce[0], earthAcce[1], earthAcce[2], ra);
                         acceDataSet.add(acceData);
                         acceNum++;
 
-                        if (startUpload && acceNum % uploadWait == 0) {
+                        if (startUpload && acceNum % uploadWait == 0 && acceNum - startUploadNum > uploadWait) {
                             startListen_acce = false;
                             startUpload_acce = true;
                         }
-                        if (startPredict && acceNum % input_width == 1 && acceNum > input_width) {
+                        if (startPredict && acceNum % input_width == 1 && acceNum - startPredictNum > input_width) {
                             startListen_acce = false;
                             startPredict_acce = true;
                         }
@@ -278,10 +312,6 @@ public class MultiSensors {
                             SensorData.put("gyroscopeX", gyroDataSet.get(i).getGyroscopeX());
                             SensorData.put("gyroscopeY", gyroDataSet.get(i).getGyroscopeY());
                             SensorData.put("gyroscopeZ", gyroDataSet.get(i).getGyroscopeZ());
-//                            for (String key : SensorData.keySet()) {
-//                                predictData[predictNum] = SensorData.get(key);
-//                                predictNum += 1;
-//                            }
                             SensorData.put("timeNow", (float)acceDataSet.get(i).getTimeNow());
 
                             for (String activity : activityItems) {
@@ -295,8 +325,7 @@ public class MultiSensors {
                         }
 
                         txvResult.setText("Num: " + startNum + " to " + stopNum + " " + "Upload Num: " + dataNum);
-                        startUpload_acce = false;
-                        startUpload_gyro = false;
+                        uploadStop();
                         sensorStart();
                     }
                     if (startPredict_acce && startPredict_gyro) {
@@ -305,10 +334,10 @@ public class MultiSensors {
                         for (int i = 0; i < input_width; i++) {
                             predictData[i * channels + 0] = acceDataSet.get(predictTime * input_width + i).getAccelerometerX();
                             predictData[i * channels + 1] = acceDataSet.get(predictTime * input_width + i).getAccelerometerY();
-                            //predictData[i * channels + 2] = acceDataSet.get(predictTime * input_width + i).getAccelerometerZ();
-                            predictData[i * channels + 2] = gyroDataSet.get(predictTime * input_width + i).getGyroscopeX();
-                            predictData[i * channels + 3] = gyroDataSet.get(predictTime * input_width + i).getGyroscopeY();
-                            predictData[i * channels + 4] = gyroDataSet.get(predictTime * input_width + i).getGyroscopeZ();
+                            predictData[i * channels + 2] = acceDataSet.get(predictTime * input_width + i).getAccelerometerZ();
+                            predictData[i * channels + 3] = gyroDataSet.get(predictTime * input_width + i).getGyroscopeX();
+                            predictData[i * channels + 4] = gyroDataSet.get(predictTime * input_width + i).getGyroscopeY();
+                            predictData[i * channels + 5] = gyroDataSet.get(predictTime * input_width + i).getGyroscopeZ();
                         }
                         activityPrediction(predictData);
                     }
@@ -324,14 +353,32 @@ public class MultiSensors {
                         gyroDataSet.add(gyroData);
                         gyroNum++;
 
-                        if (startUpload && gyroNum % uploadWait == 0) {
+                        if (startUpload && gyroNum % uploadWait == 0 && gyroNum - startUploadNum > uploadWait) {
                             startListen_gyro = false;
                             startUpload_gyro = true;
                         }
-                        if (startPredict && gyroNum % input_width == 1 && gyroNum > input_width) {
+                        if (startPredict && gyroNum % input_width == 1 && gyroNum - startPredictNum > input_width) {
                             startListen_gyro = false;
                             startPredict_gyro = true;
                         }
+                    }
+                    break;
+                case Sensor.TYPE_GRAVITY:
+                    if (startListen_grav) {
+//                        txv.setText("Gravity"
+//                                + "\nX: " + event.values[0]
+//                                + "\nY: " + event.values[1]
+//                                + "\nZ: " + event.values[2]);
+                        gravData = event.values;
+                    }
+                    break;
+                case Sensor.TYPE_MAGNETIC_FIELD:
+                    if (startListen_magn) {
+//                        txv.setText("Magnetic"
+//                                + "\nX: " + event.values[0]
+//                                + "\nY: " + event.values[1]
+//                                + "\nZ: " + event.values[2]);
+                        magnData = event.values;
                     }
                     break;
                 default:
@@ -340,6 +387,24 @@ public class MultiSensors {
             }
         }
     };
+
+    private float[] phone2earth(SensorEvent event)
+    {
+        float[] Rotate = new float[16];
+        float[] earthAcce = new float[4];
+
+        mSensorManager.getRotationMatrix(Rotate, null, gravData, magnData);
+        float[] relativacc = new float[4];
+        float[] inv = new float[16];
+        relativacc[0] = event.values[0];
+        relativacc[1] = event.values[1];
+        relativacc[2] = event.values[2];
+        relativacc[3] = 0;
+        android.opengl.Matrix.invertM(inv, 0, Rotate, 0);
+        android.opengl.Matrix.multiplyMV(earthAcce, 0, inv, 0, relativacc, 0);
+
+        return earthAcce;
+    }
 
     private void activityPrediction(float[] predictData)
     {
@@ -365,8 +430,7 @@ public class MultiSensors {
 //        }
 //        last_activity = activityItems[maxIndex];
 
-        startPredict_acce = false;
-        startPredict_gyro = false;
+        predictStop();
         sensorStart();
     }
 }

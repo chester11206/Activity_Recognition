@@ -23,31 +23,30 @@ firebase_admin.initialize_app(cred, {
 })
 
 # About save path
-csv_folder_name = os.path.join(home, "Activity_Source/Data")
+csv_folder_name = os.path.join(home, "Activity_Source_test/Data")
 csv_file_name = "rawData"
 
-model_folder_name = os.path.join(home, "Activity_Source/Model/model")
+model_folder_name = os.path.join(home, "Activity_Source_test/Model/model")
 model_file_name = "ActivityCNN"
 
-model_info_file_name = os.path.join(home, "Activity_Source/Model/model_info.csv")
+model_info_file_name = os.path.join(home, "Activity_Source_test/Model/model_info.csv")
 model_info_type = ["Index", "Test Accuracy", "Input Width", "Batch Size", "Epoch", "Kernel Size", "Depth", "Dense Size", "Model Layer"]
-layer_info = "(depthConv + BatchNormarlization)*2 + (Dense + BatchNormarlization)*6, no normalize, no acceZ"
+layer_info = "(depthConv + BatchNormarlization)*2 + (Dense + BatchNormarlization)*3, no normalize"
 class_type = ["Biking", "In Vehicle", "Running", "Still", "Tilting", "Walking", "Features"]
 
 # About ML
 input_height = 1
 input_width = 400
-num_channels = 5
+num_channels = 6
 num_labels = 6
-feature_list = [6,7,9,10,11]
 
 kernel_size = [30,20]
 depth = [16,8]
-dense_size = [256,128,num_labels]
+dense_size = [256,256,num_labels]
 num_hidden = 256
 
 learning_rate = 0.0001
-epoch_num = 2500
+epoch_num = 2000
 epoch_start = 0
 iters = 0
 batch_size = 64
@@ -116,11 +115,13 @@ def write_data(raw_data):
     new_data = list(csv.reader(open(csv_path,'r')))
     new_data = np.array(new_data[1:]).astype(float)
 
+    print (new_data.shape)
     return new_data
 
 def label_rawData(npdata):
 
-    npdata = np.delete(npdata,8,1)
+    # move acceZ
+    #npdata = np.delete(npdata,8,1)
     new_npdata = []
     if npdata.size != 0:
         activity_base = npdata[0, :num_labels]
@@ -132,6 +133,7 @@ def label_rawData(npdata):
                 idx_base+=1
 
         data_num = npdata.shape[0]
+        same_count = 0
         for i in range(0, data_num):
             activity_temp = npdata[i, :num_labels]
             idx_temp = 0
@@ -140,17 +142,18 @@ def label_rawData(npdata):
                     break
                 else:
                     idx_temp+=1
-
-            if (i+1)%input_width == 0:
-                temp_data_last = npdata[i+1-input_width:i+1, num_labels:-1].flatten()
-                temp_data_last = np.hstack((activity_temp, temp_data_last))
-                new_npdata.append(temp_data_last)
-
-            if idx_temp != idx_base:
-                if i%input_width != 0:
-                    temp_data_last = npdata[i-input_width:i, num_labels:-1].flatten()
-                    temp_data_last = np.hstack((activity_base, temp_data_last))
+            if idx_temp == idx_base:
+                same_count += 1;
+                if same_count == input_width:
+                    temp_data_last = npdata[i+1-input_width:i+1, num_labels:-1].flatten()
+                    temp_data_last = np.hstack((activity_temp, temp_data_last))
                     new_npdata.append(temp_data_last)
+                    same_count = 0;
+            else:
+                # if i > input_width:
+                #     temp_data_last = npdata[i-input_width:i, num_labels:-1].flatten()
+                #     temp_data_last = np.hstack((activity_base, temp_data_last))
+                #     new_npdata.append(temp_data_last)
                 if i+input_width <= data_num:
                     temp_data_next = npdata[i:i+input_width, num_labels:-1].flatten()
                     temp_data_next = np.hstack((activity_temp, temp_data_next))
@@ -158,8 +161,29 @@ def label_rawData(npdata):
 
                 idx_base = idx_temp
                 activity_base = activity_temp
+                same_count = 0;
+
+            # if (i+1)%input_width == 0:
+            #     temp_data_last = npdata[i+1-input_width:i+1, num_labels:-1].flatten()
+            #     temp_data_last = np.hstack((activity_temp, temp_data_last))
+            #     new_npdata.append(temp_data_last)
+
+            # if idx_temp != idx_base:
+            #     if i%input_width != 0:
+            #         if i > input_width:
+            #             temp_data_last = npdata[i-input_width:i, num_labels:-1].flatten()
+            #             temp_data_last = np.hstack((activity_base, temp_data_last))
+            #             new_npdata.append(temp_data_last)
+            #         if i+input_width <= data_num:
+            #             temp_data_next = npdata[i:i+input_width, num_labels:-1].flatten()
+            #             temp_data_next = np.hstack((activity_temp, temp_data_next))
+            #             new_npdata.append(temp_data_next)
+
+            #     idx_base = idx_temp
+            #     activity_base = activity_temp
 
     new_npdata = np.array(new_npdata)
+    print (new_npdata.shape)
     return new_npdata
 
 def getXY(all_dataset):
@@ -394,7 +418,7 @@ print (trainY.shape)
 print (testX.shape)
 print (testY.shape)
 
-remove_firebase()
+#remove_firebase()
 
 
 #############
