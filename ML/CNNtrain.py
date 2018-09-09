@@ -23,16 +23,16 @@ firebase_admin.initialize_app(cred, {
 })
 
 # About save path
-csv_folder_name = os.path.join(home, "Activity_Source_test/Data")
+csv_folder_name = os.path.join(home, "Activity_Source/Data")
 csv_file_name = "rawData"
 
-model_folder_name = os.path.join(home, "Activity_Source_test/Model/model")
+model_folder_name = os.path.join(home, "Activity_Source/Model/model")
 model_file_name = "ActivityCNN"
 
-model_info_file_name = os.path.join(home, "Activity_Source_test/Model/model_info.csv")
+model_info_file_name = os.path.join(home, "Activity_Source/Model/model_info.csv")
 model_info_type = ["Index", "Test Accuracy", "Input Width", "Batch Size", "Epoch", "Kernel Size", "Depth", "Dense Size", "Model Layer"]
 layer_info = "(depthConv + BatchNormarlization)*2 + (Dense + BatchNormarlization)*3, no normalize"
-class_type = ["Biking", "In Vehicle", "Running", "Still", "Tilting", "Walking", "Features"]
+class_type = ["Biking", "In Vehicle", "Running", "Still", "Tilting", "Walking"]
 
 # About ML
 input_height = 1
@@ -72,7 +72,16 @@ def get_firebase():
     npdata = np.array(data.values)
     npdata = npdata[:data_num,:]
 
-    return npdata
+    act = npdata[:,0].astype(int)
+    one_hot = np.zeros((act.size, len(class_type)))
+    one_hot[np.arange(act.size), act] = 1
+
+    new_npdata = np.hstack((one_hot, npdata[:,1:]))
+    print (new_npdata.shape)
+    print (new_npdata[:10,:10])
+
+
+    return new_npdata
 
 def write_data(raw_data):
     global csv_folder_name

@@ -6,6 +6,7 @@ import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Build;
+import android.os.Environment;
 import android.support.annotation.NonNull;
 import android.text.method.ScrollingMovementMethod;
 import android.util.TypedValue;
@@ -33,6 +34,10 @@ import com.google.firebase.ml.custom.FirebaseModelOutputs;
 import com.google.firebase.ml.custom.model.FirebaseCloudModelSource;
 import com.google.firebase.ml.custom.model.FirebaseModelDownloadConditions;
 
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.OutputStreamWriter;
 import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -52,6 +57,8 @@ public class MultiSensors {
 
     TextView txvResult;
     TextView predicttxv;
+
+    String csvTitle = "Activity,AcceX,AcceY,AcceZ,GyroX,GyroY,GyroZ,Time";
 
     private ActivityInference activityInference;
     private SensorManager mSensorManager;
@@ -102,6 +109,18 @@ public class MultiSensors {
         myMap.put("Gyroscope", Sensor.TYPE_GYROSCOPE);
         myMap.put("Gravity", Sensor.TYPE_GRAVITY);
         myMap.put("Magnetic", Sensor.TYPE_MAGNETIC_FIELD);
+        return myMap;
+    }
+    public static final Map<String, Integer> activity_map = createActivityMap();
+    private static Map<String, Integer> createActivityMap()
+    {
+        Map<String, Integer> myMap = new LinkedHashMap<String, Integer>();
+        myMap.put("Biking", 0);
+        myMap.put("In Vehicle", 1);
+        myMap.put("Running", 2);
+        myMap.put("Still", 3);
+        myMap.put("Tilting", 4);
+        myMap.put("Walking", 5);
         return myMap;
     }
 
@@ -186,7 +205,7 @@ public class MultiSensors {
                     txvResult.setText("You haven't set the activity!");
                 }
                 else {
-                    txvResult.setText("Uploading...");
+                    txvResult.setText("Saving...");
                     startUpload = true;
                     startUploadNum = acceNum;
                 }
@@ -311,30 +330,29 @@ public class MultiSensors {
                         startNum = acceNum - uploadWait;
                         stopNum = acceNum;
 
-//                        Map<String, Float> SensorData = new LinkedHashMap<String, Float>();
-//                        float [] predictData = new float[input_width * channels];
-//                        int predictNum = 0;
-                        for (int i = startNum; i < stopNum; i++) {
-                            Map<String, Float> SensorData = new LinkedHashMap<String, Float>();
-                            SensorData.put("accelerometerX", acceDataSet.get(i).getAccelerometerX());
-                            SensorData.put("accelerometerY", acceDataSet.get(i).getAccelerometerY());
-                            SensorData.put("accelerometerZ", acceDataSet.get(i).getAccelerometerZ());
-                            SensorData.put("gyroscopeX", gyroDataSet.get(i).getGyroscopeX());
-                            SensorData.put("gyroscopeY", gyroDataSet.get(i).getGyroscopeY());
-                            SensorData.put("gyroscopeZ", gyroDataSet.get(i).getGyroscopeZ());
-                            SensorData.put("timeNow", (float)acceDataSet.get(i).getTimeNow());
+                        boolean writecsv;
+                        writecsv = writeCSV();
 
-                            for (String activity : activityItems) {
-                                if (activity.equals(acceDataSet.get(i).getReal_activity())) {
-                                    SensorData.put(activity, (float) 1);
-                                } else {
-                                    SensorData.put(activity, (float) 0);
-                                }
-                            }
-                            mDatabase.child("SensorDataSet").push().setValue(SensorData);
+//                        for (int i = startNum; i < stopNum; i++) {
+//                            Map<String, Float> SensorData = new LinkedHashMap<String, Float>();
+//                            SensorData.put("Activity", (float) activity_map.get(acceDataSet.get(i).getReal_activity()));
+//                            SensorData.put("accelerometerX", acceDataSet.get(i).getAccelerometerX());
+//                            SensorData.put("accelerometerY", acceDataSet.get(i).getAccelerometerY());
+//                            SensorData.put("accelerometerZ", acceDataSet.get(i).getAccelerometerZ());
+//                            SensorData.put("gyroscopeX", gyroDataSet.get(i).getGyroscopeX());
+//                            SensorData.put("gyroscopeY", gyroDataSet.get(i).getGyroscopeY());
+//                            SensorData.put("gyroscopeZ", gyroDataSet.get(i).getGyroscopeZ());
+//                            SensorData.put("timeNow", (float)acceDataSet.get(i).getTimeNow());
+//
+//                            mDatabase.child("SensorDataSet").push().setValue(SensorData);
+//                        }
+                        if (writecsv) {
+                            txvResult.setText("Num: " + startNum + " to " + stopNum + " " + "Upload Num: " + dataNum + "\nSave Success");
+                        }
+                        else {
+                            txvResult.setText("Num: " + startNum + " to " + stopNum + " " + "Upload Num: " + dataNum + "\nSave Fail");
                         }
 
-                        txvResult.setText("Num: " + startNum + " to " + stopNum + " " + "Upload Num: " + dataNum);
                         uploadStop();
                         sensorStart();
                     }
@@ -414,6 +432,62 @@ public class MultiSensors {
         android.opengl.Matrix.multiplyMV(earthAcce, 0, inv, 0, relativacc, 0);
 
         return earthAcce;
+    }
+
+    private boolean writeCSV()
+    {
+        String folderName = null;
+        String mFileName;
+        boolean initFile = false;
+
+        if(Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)){
+            String path = Environment.getExternalStorageDirectory().getAbsolutePath();
+            if (path != null) {
+                folderName = path +"/ActivityCSV/";
+            }
+        }
+
+        File folder = new File(folderName);
+        if (!folder.exists()) {
+            initFile = folder.mkdirs();
+        }
+
+        mFileName = folderName + "data.csv";
+        File file = new File(mFileName);
+
+        try {
+
+            BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file, true), "GBK"), 1024);
+            StringBuffer sbtitle = new StringBuffer();
+            if (initFile) {
+                sbtitle.append(csvTitle + "\r\n");
+            }
+            bw.write(sbtitle.toString());
+
+            for (int i = startNum; i < stopNum; i++) {
+                StringBuffer sbdata = new StringBuffer();
+                sbdata.append((float) activity_map.get(acceDataSet.get(i).getReal_activity()) + ",");
+                sbdata.append(acceDataSet.get(i).getAccelerometerX() + ",");
+                sbdata.append(acceDataSet.get(i).getAccelerometerY() + ",");
+                sbdata.append(acceDataSet.get(i).getAccelerometerZ() + ",");
+                sbdata.append(gyroDataSet.get(i).getGyroscopeX() + ",");
+                sbdata.append(gyroDataSet.get(i).getGyroscopeY() + ",");
+                sbdata.append(gyroDataSet.get(i).getGyroscopeZ() + ",");
+                sbdata.append((float)acceDataSet.get(i).getTimeNow() + "\r\n");
+                bw.write(sbdata.toString());
+
+                if(i % 1000==0)
+                    bw.flush();
+            }
+
+            bw.flush();
+            bw.close();
+            return true;
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return false;
     }
 
     private void activityPrediction(float[] predictData)
