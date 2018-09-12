@@ -3,6 +3,9 @@ from tensorflow.contrib import rnn
 from tensorflow.examples.tutorials.mnist import input_data
 import pandas as pd
 import numpy as np
+import firebase_admin
+from firebase_admin import credentials
+from firebase_admin import db
 import csv
 import sys
 import os
@@ -11,11 +14,17 @@ from pathlib import Path
 from tensorflow.python.tools import freeze_graph
 from tensorflow.python.tools import optimize_for_inference_lib
 
-# About save path
+# About firebase
 home = str(Path.home())
+
+cred = credentials.Certificate('firebase-adminsdk.json')
+firebase_admin.initialize_app(cred, {
+    'databaseURL' : 'https://total-cascade-210406.firebaseio.com'
+})
+
+# About save path
 csv_folder_name = os.path.join(home, "Activity_Source/Data")
 csv_file_name = "rawData"
-data_file_name = "data.csv"
 
 model_folder_name = os.path.join(home, "Activity_Source/Model/model")
 model_file_name = "ActivityCNN"
@@ -37,10 +46,10 @@ dense_size = [256,256,num_labels]
 num_hidden = 256
 
 learning_rate = 0.0001
-epoch_num = 2500
+epoch_num = 2000
 epoch_start = 0
 iters = 0
-batch_size =128
+batch_size = 64
 perm_X = np.empty
 perm_Y = np.empty
 
@@ -52,82 +61,47 @@ train_p = 0.9
 # **Function
 
 # Data Process
-def read_data():
-    global csv_folder_name
-    global data_file_name
+def get_firebase():
 
-    data_path = os.path.join(csv_folder_name, data_file_name)
-    new_data = list(csv.reader(open(data_path,'r')))
-    new_data = np.array(new_data[1:]).astype(float)
+    # connect firebase
+    root = db.reference()
+    values = root.child('SensorDataSet').get()
+    data = pd.DataFrame(values).T
+    
+    data_num = data.shape[0] - (data.shape[0] % input_width)
+    npdata = np.array(data.values)
+    npdata = npdata[:data_num,:]
 
-    temp1 = np.array(new_data[:,1])
-    temp2 = np.array(new_data[:,2])
-    new_data[:,1] = temp2
-    new_data[:,2] = temp1
-
-    act = new_data[:,0].astype(int)
+    act = npdata[:,0].astype(int)
     one_hot = np.zeros((act.size, len(class_type)))
     one_hot[np.arange(act.size), act] = 1
 
-    new_data = np.hstack((one_hot, new_data[:,1:]))
-    print (new_data.shape)
+    new_npdata = np.hstack((one_hot, npdata[:,1:]))
+    print (new_npdata.shape)
+    print (new_npdata[:10,:10])
 
-    return new_data
 
-def write_data():
+    return new_npdata
+
+def write_data(raw_data):
     global csv_folder_name
     global csv_file_name
-    global data_file_name
 
-    data_path = os.path.join(csv_folder_name, data_file_name)
-    if os.path.exists(data_path):
-        # read new data
-        new_data = list(csv.reader(open(data_path,'r')))
-        new_data = np.array(new_data[1:]).astype(float)
+    # make new csv folder
+    if not os.path.exists(csv_folder_name):
+        os.makedirs(csv_folder_name)
 
-        act = new_data[:,0].astype(int)
-        one_hot = np.zeros((act.size, len(class_type)))
-        one_hot[np.arange(act.size), act] = 1
+    csv_path = os.path.join(csv_folder_name, csv_file_name)
+    i = 0
+    while os.path.exists(csv_path + str(i) + ".csv"):
+        i += 1
 
-        new_data = np.hstack((one_hot, new_data[:,1:]))
-        print (new_data.shape)
-
-        # get last data path
-        csv_path = os.path.join(csv_folder_name, csv_file_name)
-        i = 0
-        while os.path.exists(csv_path + str(i) + ".csv"):
-            i += 1
-
-        #write new data to csv
-        if i != 0:
-            csv_last_path = csv_path + str(i-1) + ".csv"
-            csv_path = csv_path + str(i) + ".csv"
-
-            # combine new and last data, save to new file
-            with open(csv_last_path, 'rt') as infile:
-                with open(csv_path, 'wt') as outfile:
-                    writer = csv.writer(outfile)
-                    reader = csv.reader(infile)
-                    writer.writerow(next(reader))
-                    for row in reader:
-                        writer.writerow(row)
-                    for item in new_data:
-                        writer.writerow(item)
-                        
-            #os.remove(data_path)
-        else:
-            csv_path = csv_path + str(i) + ".csv"
-            os.rename(data_path, csv_path)
-    else:
-        csv_path = os.path.join(csv_folder_name, csv_file_name)
-        i = 0
-        while os.path.exists(csv_path + str(i) + ".csv"):
-            i += 1
-
+    #write raw data to csv
+    if i != 0:
         csv_last_path = csv_path + str(i-1) + ".csv"
         csv_path = csv_path + str(i) + ".csv"
 
-        # combine new and last data, save to new file
+        # combine with old data and save to new file
         with open(csv_last_path, 'rt') as infile:
             with open(csv_path, 'wt') as outfile:
                 writer = csv.writer(outfile)
@@ -135,14 +109,23 @@ def write_data():
                 writer.writerow(next(reader))
                 for row in reader:
                     writer.writerow(row)
+                for item in raw_data:
+                    writer.writerow(item)
+    else:
+        csv_path = csv_path + str(i) + ".csv"
+        csv_file = open(csv_path,"w")
+        csv_w = csv.writer(csv_file)
+        csv_w.writerow(class_type)
+        for item in raw_data:
+            csv_w.writerow(item)
+        csv_file.close()
 
     # read data from new file
-    all_data = list(csv.reader(open(csv_path,'r')))
-    all_data = np.array(all_data[1:]).astype(float)
+    new_data = list(csv.reader(open(csv_path,'r')))
+    new_data = np.array(new_data[1:]).astype(float)
 
-    print (all_data.shape)
-    print (all_data[:20,:20])
-    return all_data
+    print (new_data.shape)
+    return new_data
 
 def label_rawData(npdata):
 
@@ -245,6 +228,11 @@ def feature_normalize(dataset):
             dataset[:,j] = temp
 
     return dataset
+
+# clean firebase
+def remove_firebase():
+    root = db.reference()
+    root.child('SensorDataSet').delete()
 
 # Run Batch
 def next_batch(X_train, Y_train, num, start):
@@ -409,9 +397,11 @@ def apply_max_pool(x,kernel_size,stride_size):
 #######################
 # **Get train&test data
 
+# Read raw data, shape=[rawData_num, num_channels+num_labels+1]=[-1,13]
+raw_data = get_firebase()
+
 # combine old data and save, shape=[data_num, input_width*num_channels+num_labels]=[-1,2706]
-all_data = read_data()
-#all_data = write_data()
+all_data = write_data(raw_data)
 
 # label raw data, shape=[data_num, input_width*num_channels+num_labels]=[-1,2706]
 labeled_data = label_rawData(all_data)
@@ -436,6 +426,9 @@ print (trainX.shape)
 print (trainY.shape)
 print (testX.shape)
 print (testY.shape)
+
+remove_firebase()
+print ("Remove Success")
 
 
 #############

@@ -35,6 +35,8 @@ kernel_size = [30,20]
 depth = [16,8]
 dense_size = [256,256,num_labels]
 num_hidden = 256
+# LSTM Layer Num
+layer_num = 2
 
 learning_rate = 0.0001
 epoch_num = 2500
@@ -406,6 +408,106 @@ def apply_max_pool(x,kernel_size,stride_size):
     return tf.layers.max_pooling2d(inputs=x, pool_size=[1, kernel_size], strides=stride_size)
 
 
+def conv_op(input_op,name,kh,kw,n_out,dh,dw,p):
+    # 输入的通道数
+    n_in = input_op.get_shape()[-1].value
+    with tf.name_scope(name) as scope:
+        kernel = weight_variable([kh,kw,n_in,n_out])
+        #kernel = tf.get_variable("w",shape=[kh,kw,n_in,n_out],dtype=tf.float32,initializer=tf.contrib.layers.xavier_initializer_conv2d())
+        conv = tf.nn.conv2d(input_op, kernel, (1,dh,dw,1),padding='SAME')
+        bias_init_val = tf.constant(0.0, shape=[n_out],dtype=tf.float32)
+        biases = tf.Variable(bias_init_val , trainable=True , name='b')
+        z = tf.nn.bias_add(conv,biases)
+        activation = tf.nn.relu(z,name=scope)
+        p += [kernel,biases]
+        return activation
+
+# 定义全连接层
+def fc_op(input_op,name,n_out,p):
+    n_in = input_op.get_shape()[-1].value
+    with tf.name_scope(name) as scope:
+        kernel = weight_variable([n_in,n_out])
+        #kernel = tf.get_variable(scope+'w',shape=[n_in,n_out],dtype=tf.float32,initializer=tf.contrib.layers.xavier_initializer_conv2d())
+        biases = tf.Variable(tf.constant(0.1,shape=[n_out],dtype=tf.float32),name='b')
+        # tf.nn.relu_layer()用来对输入变量input_op与kernel做乘法并且加上偏置b
+        activation = tf.nn.relu_layer(input_op,kernel,biases,name=scope)
+        p += [kernel,biases]
+        return activation
+
+# 定义最大池化层
+def mpool_op(input_op,name,kh,kw,dh,dw):
+    return tf.nn.max_pool(input_op,ksize=[1,kh,kw,1],strides=[1,dh,dw,1],padding='SAME',name=name)
+
+#定义网络结构
+def inference_op(input_op,keep_prob):
+    p = []
+    conv1_1 = conv_op(input_op,name='conv1_1',kh=1,kw=3,n_out=64,dh=1,dw=1,p=p)
+    conv1_2 = conv_op(conv1_1,name='conv1_2',kh=1,kw=3,n_out=64,dh=1,dw=1,p=p)
+    pool1 = mpool_op(conv1_2,name='pool1',kh=1,kw=3,dw=2,dh=2)
+
+    conv2_1 = conv_op(pool1,name='conv2_1',kh=1,kw=3,n_out=128,dh=1,dw=1,p=p)
+    conv2_2 = conv_op(conv2_1,name='conv2_2',kh=1,kw=3,n_out=128,dh=1,dw=1,p=p)
+    pool2 = mpool_op(conv2_2, name='pool2', kh=1, kw=3, dw=2, dh=2)
+
+    conv3_1 = conv_op(pool2, name='conv3_1', kh=1, kw=3, n_out=256, dh=1, dw=1, p=p)
+    conv3_2 = conv_op(conv3_1, name='conv3_2', kh=1, kw=3, n_out=256, dh=1, dw=1, p=p)
+    conv3_3 = conv_op(conv3_2, name='conv3_3', kh=1, kw=3, n_out=256, dh=1, dw=1, p=p)
+    pool3 = mpool_op(conv3_3, name='pool3', kh=1, kw=3, dw=2, dh=2)
+
+    # conv4_1 = conv_op(pool3, name='conv4_1', kh=1, kw=3, n_out=512, dh=1, dw=1, p=p)
+    # conv4_2 = conv_op(conv4_1, name='conv4_2', kh=1, kw=3, n_out=512, dh=1, dw=1, p=p)
+    # conv4_3 = conv_op(conv4_2, name='conv4_3', kh=1, kw=3, n_out=512, dh=1, dw=1, p=p)
+    # pool4 = mpool_op(conv4_3, name='pool4', kh=1, kw=3, dw=2, dh=2)
+
+    # conv5_1 = conv_op(pool4, name='conv5_1', kh=1, kw=3, n_out=512, dh=1, dw=1, p=p)
+    # conv5_2 = conv_op(conv5_1, name='conv5_2', kh=1, kw=3, n_out=512, dh=1, dw=1, p=p)
+    # conv5_3 = conv_op(conv5_2, name='conv5_3', kh=1, kw=3, n_out=512, dh=1, dw=1, p=p)
+    # pool5 = mpool_op(conv5_3, name='pool5', kh=1, kw=3, dw=2, dh=2)
+
+    shp = pool3.get_shape()
+    flattened_shape = shp[1].value * shp[2].value * shp[3].value
+    resh1 = tf.reshape(pool3,[-1,flattened_shape],name="resh1")
+
+    fc6 = fc_op(resh1,name="fc6",n_out=1024,p=p)
+    fc6_drop = tf.nn.dropout(fc6,keep_prob,name='fc6_drop')
+    fc7 = fc_op(fc6_drop,name="fc7",n_out=1024,p=p)
+    fc7_drop = tf.nn.dropout(fc7,keep_prob,name="fc7_drop")
+    fc8 = fc_op(fc7_drop,name="fc8",n_out=512,p=p)
+
+    return fc8,p
+
+def RNN_op(input_op, keep_prob):
+    mlstm_cell = []
+    for i in range(layer_num):
+        #lstm_cell = rnn.BasicLSTMCell(num_units=hidden_size, forget_bias=1.0, state_is_tuple=True)
+        lstm_cell = tf.nn.rnn_cell.LSTMCell(num_units=num_hidden, forget_bias=1.0, state_is_tuple=True, name='basic_lstm_cell')
+        lstm_cell = rnn.DropoutWrapper(cell=lstm_cell, input_keep_prob=1.0, output_keep_prob=1.0)
+        mlstm_cell.append(lstm_cell)
+    mlstm_cell = tf.contrib.rnn.MultiRNNCell(mlstm_cell,state_is_tuple=True)
+
+    # **Step3: Initiate state with zero
+    init_state = mlstm_cell.zero_state(tf.shape(X)[0], dtype=tf.float32)
+
+    # **Step4: Calculate in timeStep
+    outputs = list()
+    state = init_state
+    with tf.variable_scope('RNN'):
+        input_shape = input_op.get_shape().as_list()
+        print (input_shape)
+        for timestep in range(batch_size):
+            if timestep > 0:
+                tf.get_variable_scope().reuse_variables()
+            # Variable "state" store the LSTM state
+            timestep_X = tf.reshape(input_op[timestep], [-1,input_height,input_width,num_channels])
+            timestep_cell, p = inference_op(timestep_X,keep_prob)
+
+            (cell_output, state) = mlstm_cell(timestep_cell, state)
+            outputs.append(cell_output)
+
+    h_state = outputs[-1]
+
+    return h_state
+
 #######################
 # **Get train&test data
 
@@ -442,61 +544,46 @@ print (testY.shape)
 # **Build CNN
 
 X_ = tf.placeholder(tf.float32, shape=[None,input_height*input_width*num_channels], name="input_x")
+X = tf.reshape(X_, [-1,input_height,input_width,num_channels])
 Y = tf.placeholder(tf.float32, shape=[None,num_labels], name="input_y")
 
-X = tf.reshape(X_, [-1,input_height,input_width,num_channels])
+keep_prob = tf.placeholder(tf.float32)
 
 # depth_conv = apply_depthwise_conv(X,kernel_size,num_channels,depth)
 # max_pool = apply_max_pool(depth_conv,20,2)
 # depth_conv = apply_depthwise_conv(max_pool,6,depth*num_channels,depth//10)
 
-beta= tf.get_variable("beta",shape=[],initializer=tf.constant_initializer(0.0))
-gamma=tf.get_variable("gamma",shape=[],initializer=tf.constant_initializer(1.0))
+# depth_conv = X
+# for i in range(len(kernel_size)):
+#     channels = num_channels
+#     if i > 0:
+#         for j in range(i):
+#             channels = channels * depth[j]
+#     depth_conv = apply_depthwise_conv(depth_conv,kernel_size[i],channels,depth[i])
 
+# shape_conv = depth_conv.get_shape().as_list()
+# logits = tf.reshape(depth_conv, [-1, shape_conv[1] * shape_conv[2] * shape_conv[3]])
 
-depth_conv = X
-for i in range(len(kernel_size)):
-    channels = num_channels
-    if i > 0:
-        for j in range(i):
-            channels = channels * depth[j]
-    depth_conv = apply_depthwise_conv(depth_conv,kernel_size[i],channels,depth[i])
+# for i in range(len(dense_size)):
+#     logits = tf.layers.dense(inputs=logits, units=dense_size[i], activation=tf.nn.relu)
+h_state = RNN_op(X, keep_prob)
 
-    # axes=[d for d in range(len(depth_conv.get_shape()))]
-    # x_mean,x_variance=tf.nn.moments(depth_conv,axes)
-    # depth_conv=tf.nn.batch_normalization(depth_conv,x_mean,x_variance,beta,gamma,1e-10,"bn")
+# h_state is the output of hidden layer
+# Weight, Bias, Softmax to predict
+W = tf.Variable(tf.truncated_normal([num_hidden, num_labels], stddev=0.1), dtype=tf.float32)
+bias = tf.Variable(tf.constant(0.1,shape=[num_labels]), dtype=tf.float32)
+Y_pre = tf.nn.softmax(tf.matmul(h_state, W) + bias, name = "prediction")
 
-    #depth_conv=max_pool = apply_max_pool(depth_conv,20,2)
+# logits, p = inference_op(X,keep_prob)
 
-shape_conv = depth_conv.get_shape().as_list()
-logits = tf.reshape(depth_conv, [-1, shape_conv[1] * shape_conv[2] * shape_conv[3]])
+# shape_logits = logits.get_shape().as_list()
+# Y_pre = tf.nn.softmax(logits, name = "prediction")
 
-for i in range(len(dense_size)):
-    logits = tf.layers.dense(inputs=logits, units=dense_size[i], activation=tf.nn.relu)
+# loss = -tf.reduce_sum(Y * tf.log(Y_pre))
+# optimizer = tf.train.GradientDescentOptimizer(learning_rate = learning_rate).minimize(loss)
 
-    # axes=[d for d in range(len(logits.get_shape()))]
-    # x_mean,x_variance=tf.nn.moments(logits,axes)
-    # logits=tf.nn.batch_normalization(logits,x_mean,x_variance,beta,gamma,1e-10,"bn")
-
-shape_logits = logits.get_shape().as_list()
-# dense1 = tf.layers.dense(inputs=depth_conv, units=1024, activation=tf.nn.relu)
-# dense2= tf.layers.dense(inputs=dense1, units=512, activation=tf.nn.relu)
-# logits= tf.layers.dense(inputs=dense2, units=256, activation=None)
-
-# shape = logits.get_shape().as_list()
-# c_flat = tf.reshape(logits, [-1, shape[1] * shape[2] * shape[3]])
-
-# f_weights_l1 = weight_variable([shape[1] * shape[2] * shape[3], num_hidden])
-# f_biases_l1 = bias_variable([num_hidden])
-# f = tf.nn.tanh(tf.add(tf.matmul(c_flat, f_weights_l1),f_biases_l1))
-
-# out_weights = weight_variable([num_hidden, num_labels])
-# out_biases = bias_variable([num_labels])
-# Y_pre = tf.nn.softmax(tf.matmul(f, out_weights) + out_biases, name = "prediction")
-Y_pre = tf.nn.softmax(logits, name = "prediction")
-
-loss = -tf.reduce_sum(Y * tf.log(Y_pre))
-optimizer = tf.train.GradientDescentOptimizer(learning_rate = learning_rate).minimize(loss)
+loss = -tf.reduce_mean(Y * tf.log(Y_pre))
+optimizer = tf.train.AdamOptimizer(learning_rate).minimize(loss)
 
 correct_prediction = tf.equal(tf.argmax(Y_pre,1), tf.argmax(Y,1))
 accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))

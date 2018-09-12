@@ -143,7 +143,7 @@ public class MainActivity extends AppCompatActivity {
         long TimeNow = cal.getTimeInMillis();
         timeNow = TimeNow;
         DateFormat dateFormat = getDateTimeInstance();
-        mTime.setText(dateFormat.format(TimeNow));
+        mTime.setText("\t" + dateFormat.format(TimeNow));
     }
 
     /** Activity Result */

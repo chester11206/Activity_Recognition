@@ -85,6 +85,7 @@ public class MultiSensors {
     private int channels = ActivityInference.channels;
 
     private List<acceData> acceDataSet = new ArrayList<acceData>();
+    private List<acceData> noGacceDataSet = new ArrayList<acceData>();
     private List<gyroData> gyroDataSet = new ArrayList<gyroData>();
     private float [] gravData = new float[3];
     private float [] magnData = new float[3];
@@ -96,8 +97,8 @@ public class MultiSensors {
     private int startUploadNum = 0;
     private int startPredictNum = 0;
 
-    private int allPredictNum = 0;
-    private int rightPredictNum = 0;
+    private float allPredictNum = 0;
+    private float rightPredictNum = 0;
     private float test_accuracy = 0;
 
     public static final Map<Integer, TextView> textview_map = new LinkedHashMap<Integer, TextView>();
@@ -185,7 +186,7 @@ public class MultiSensors {
             TextView txv = new TextView(context);
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
 
-            txv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
+            txv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12);
             txv.setMovementMethod(new ScrollingMovementMethod());
             txv.setLayoutParams(params);
             ll.addView(txv);
@@ -229,7 +230,7 @@ public class MultiSensors {
         stopUploadbtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View view) {
                 startUpload = false;
-                txvResult.append("\nStop Upload!");
+                txvResult.append("\nStop Save!");
             }
         });
         Button stopPredictbtn = (Button) context.findViewById(R.id.stopPredictbtn);
@@ -294,25 +295,37 @@ public class MultiSensors {
             switch (event.sensor.getType()) {
                 case Sensor.TYPE_ACCELEROMETER:
                     if (startListen_acce) {
+                        float [] noGAcce = new float[3];
                         float [] earthAcce = new float[4];
-                        earthAcce = phone2earth(event);
+                        float [] noGEarthAcce = new float[4];
+                        earthAcce = phone2earth(event.values);
+                        for (int i = 0; i < gravData.length; i++) {
+                            noGAcce[i] = event.values[i] - gravData[i];
+                        }
+                        noGEarthAcce = phone2earth(noGAcce);
 
 //                        txv.setText("\nAccelerometer"
 //                                + "\nX: " + event.values[0]
 //                                + "\nY: " + event.values[1]
 //                                + "\nZ: " + event.values[2]);
                         txv.setText("\nAccelerometer(Earth)"
-                                + "\nX: " + earthAcce[0]
-                                + "\nY: " + earthAcce[1]
-                                + "\nZ: " + earthAcce[2]);
+                                + "\nX: " + earthAcce[1]
+                                + "\nY: " + earthAcce[0]
+                                + "\nZ: " + earthAcce[2]
+                                + "\nAccelerometer(Earth noG)"
+                                + "\nX: " + noGEarthAcce[1]
+                                + "\nY: " + noGEarthAcce[0]
+                                + "\nZ: " + noGEarthAcce[2]);
 
                         String ra = real_activity;
 //                        acceData acceData = new acceData(event.values[0] - gravData[0]
 //                                , event.values[1] - gravData[1]
 //                                , event.values[2] - gravData[2]
 //                                , ra);
-                        acceData acceData = new acceData(earthAcce[0], earthAcce[1], earthAcce[2], ra);
+                        acceData acceData = new acceData(earthAcce[1], earthAcce[0], earthAcce[2], ra);
+                        acceData noGacceData = new acceData(noGEarthAcce[1], noGEarthAcce[0], noGEarthAcce[2], ra);
                         acceDataSet.add(acceData);
+                        noGacceDataSet.add(noGacceData);
                         acceNum++;
 
                         if (startUpload && acceNum % uploadWait == 0 && acceNum - startUploadNum > uploadWait) {
@@ -416,28 +429,34 @@ public class MultiSensors {
         }
     };
 
-    private float[] phone2earth(SensorEvent event)
+    private float[] phone2earth(float[] value)
     {
         float[] Rotate = new float[16];
-        float[] earthAcce = new float[4];
+        float[] result = new float[4];
+        float[] acce = new float[3];
 
         mSensorManager.getRotationMatrix(Rotate, null, gravData, magnData);
+        acce[0] = Rotate[0] * value[0] + Rotate[3] * value[1] + Rotate[6] * value[2];
+        acce[1] = Rotate[1] * value[0] + Rotate[4] * value[1] + Rotate[7] * value[2];
+        acce[2] = Rotate[2] * value[0] + Rotate[5] * value[1] + Rotate[8] * value[2];
+
         float[] relativacc = new float[4];
         float[] inv = new float[16];
-        relativacc[0] = event.values[0];
-        relativacc[1] = event.values[1];
-        relativacc[2] = event.values[2];
+        relativacc[0] = value[0];
+        relativacc[1] = value[1];
+        relativacc[2] = value[2];
         relativacc[3] = 0;
         android.opengl.Matrix.invertM(inv, 0, Rotate, 0);
-        android.opengl.Matrix.multiplyMV(earthAcce, 0, inv, 0, relativacc, 0);
+        android.opengl.Matrix.multiplyMV(result, 0, inv, 0, relativacc, 0);
 
-        return earthAcce;
+        return result;
     }
 
     private boolean writeCSV()
     {
         String folderName = null;
         String mFileName;
+        String noGFileName;
         boolean initFile = false;
 
         if(Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)){
@@ -453,16 +472,20 @@ public class MultiSensors {
         }
 
         mFileName = folderName + "data.csv";
+        noGFileName = folderName + "data_noG.csv";
         File file = new File(mFileName);
+        File noGfile = new File(noGFileName);
 
         try {
 
             BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file, true), "GBK"), 1024);
+            BufferedWriter noGbw = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(noGfile, true), "GBK"), 1024);
             StringBuffer sbtitle = new StringBuffer();
             if (initFile) {
                 sbtitle.append(csvTitle + "\r\n");
             }
             bw.write(sbtitle.toString());
+            noGbw.write(sbtitle.toString());
 
             for (int i = startNum; i < stopNum; i++) {
                 StringBuffer sbdata = new StringBuffer();
@@ -476,12 +499,28 @@ public class MultiSensors {
                 sbdata.append((float)acceDataSet.get(i).getTimeNow() + "\r\n");
                 bw.write(sbdata.toString());
 
-                if(i % 1000==0)
+                StringBuffer noGsbdata = new StringBuffer();
+                noGsbdata.append((float) activity_map.get(noGacceDataSet.get(i).getReal_activity()) + ",");
+                noGsbdata.append(noGacceDataSet.get(i).getAccelerometerX() + ",");
+                noGsbdata.append(noGacceDataSet.get(i).getAccelerometerY() + ",");
+                noGsbdata.append(noGacceDataSet.get(i).getAccelerometerZ() + ",");
+                noGsbdata.append(gyroDataSet.get(i).getGyroscopeX() + ",");
+                noGsbdata.append(gyroDataSet.get(i).getGyroscopeY() + ",");
+                noGsbdata.append(gyroDataSet.get(i).getGyroscopeZ() + ",");
+                noGsbdata.append((float)noGacceDataSet.get(i).getTimeNow() + "\r\n");
+                noGbw.write(noGsbdata.toString());
+
+                if(i % 1000==0) {
                     bw.flush();
+                    noGbw.flush();
+                }
             }
 
             bw.flush();
             bw.close();
+            noGbw.flush();
+            noGbw.close();
+
             return true;
 
         } catch (Exception e) {
@@ -519,6 +558,7 @@ public class MultiSensors {
                 + "\n" + activityItems[4] + ": " + String.format("%.8f", results[4])
                 + "\n" + activityItems[5] + ": " + String.format("%.8f", results[5])
                 + "\n\nResult: " + activityItems[maxIndex] + " " + String.format("%.8f", results[maxIndex])
+                + "\n" + rightPredictNum + " " + allPredictNum
                 + "\nTest Accuracy: " + String.format("%.8f", test_accuracy));
 
 
