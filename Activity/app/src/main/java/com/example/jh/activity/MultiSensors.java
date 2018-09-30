@@ -1,13 +1,31 @@
 package com.example.jh.activity;
 
+import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.Context;
+import android.content.DialogInterface;
+import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.location.Criteria;
+import android.location.GpsSatellite;
+import android.location.GpsStatus;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
+import android.location.LocationProvider;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Message;
+import android.provider.Settings;
 import android.support.annotation.NonNull;
+import android.support.v4.app.ActivityCompat;
 import android.text.method.ScrollingMovementMethod;
 import android.util.TypedValue;
 import android.view.View;
@@ -16,6 +34,7 @@ import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
@@ -39,10 +58,12 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStreamWriter;
 import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.Date;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -52,16 +73,21 @@ import static java.text.DateFormat.getDateTimeInstance;
 public class MultiSensors {
     public Activity context;
     public static final String TAG = "MultiSensorsApi";
-    private DatabaseReference mDatabase;
     LinearLayout ll;
 
     TextView txvResult;
     TextView predicttxv;
 
-    String csvTitle = "Activity,AcceX,AcceY,AcceZ,GyroX,GyroY,GyroZ,Time";
+    String datacsvTitle = "Activity,AcceX,AcceY,AcceZ,GyroX,GyroY,GyroZ,Time";
+    String testcsvTitle = "Right,All,Time";
 
     private ActivityInference activityInference;
     private SensorManager mSensorManager;
+    private LocationManager mLocationManager;
+
+    private float mSpeed = 0;
+    private double mLatitude = 0;
+    private double mLongitude = 0;
 
     private String [] activityItems = null;
     private String real_activity = null;
@@ -69,6 +95,8 @@ public class MultiSensors {
 
     private boolean startPredict = false;
     private boolean startUpload = false;
+    private boolean Uploading = false;
+    private boolean Predicting = false;
 
     private boolean startListen_acce = false;
     private boolean startListen_gyro = false;
@@ -100,6 +128,9 @@ public class MultiSensors {
     private float allPredictNum = 0;
     private float rightPredictNum = 0;
     private float test_accuracy = 0;
+
+    private static final int uploadmsgKey = 0;
+    private static final int predictmsgKey = 1;
 
     public static final Map<Integer, TextView> textview_map = new LinkedHashMap<Integer, TextView>();
     public static final Map<String, Integer> sensorstype_map = createSensorsTypeMap();
@@ -166,11 +197,71 @@ public class MultiSensors {
         public float getGyroscopeZ() {return gyroscopeZ;}
     }
 
-    public void start(Activity activity, SensorManager SensorManager, List<String> sensors_list) {
+    public class DataThread implements Runnable {
+        private float [] Data;
+        private int msgKey;
+
+        public void setData(float [] Data)
+        {
+            this.Data = Data;
+        }
+        public void setMsgKey(int msgKey)
+        {
+            this.msgKey = msgKey;
+        }
+
+        @Override
+        public void run () {
+            try {
+                Message message = new Message();
+                message.what = this.msgKey;
+                Bundle bundle = new Bundle();
+                bundle.putFloatArray("Data", this.Data);
+                message.setData(bundle);
+                mHandler.sendMessage(message);
+            }
+            catch (Exception e) {
+                e.printStackTrace();
+            }
+//            while (!exit)
+//            {
+//
+//            }
+        }
+    }
+    private Handler mHandler = new Handler() {
+        @Override
+        public void handleMessage (Message msg) {
+            super.handleMessage(msg);
+            switch (msg.what) {
+                case uploadmsgKey:
+                    boolean writecsv;
+                    writecsv = writeCSV();
+                    if (writecsv) {
+                        txvResult.setText("Num: " + startNum + " to " + stopNum + " " + "Upload Num: " + dataNum + "\nSave Success");
+                    }
+                    else {
+                        txvResult.setText("Num: " + startNum + " to " + stopNum + " " + "Upload Num: " + dataNum + "\nSave Fail");
+                    }
+
+                    uploadStop();
+                    sensorStart();
+                    break;
+                case predictmsgKey:
+                    Bundle predictbData = msg.getData();
+                    float [] predictData = predictbData.getFloatArray("Data");
+                    activityPrediction(predictData);
+                    break;
+                default:
+                    break;
+            }
+        }
+    };
+
+    public void start(Activity activity, SensorManager SensorManager, List<String> sensors_list, LocationManager LocationManager) {
         context = activity;
         ll = (LinearLayout) context.findViewById(R.id.sensors_display);
         activityItems = context.getResources().getStringArray(R.array.activity);
-        mDatabase = FirebaseDatabase.getInstance().getReference();
 
         RadioGroup rg = (RadioGroup)context.findViewById(R.id.radioGroup);
         rg.setOnCheckedChangeListener(rglistener);
@@ -180,7 +271,7 @@ public class MultiSensors {
         predicttxv = (TextView) this.context.findViewById(R.id.predict_txView);
         predicttxv.setMovementMethod(new ScrollingMovementMethod());
 
-        this.mSensorManager = SensorManager;
+        mSensorManager = SensorManager;
         for (String sensor : sensors_list) {
 
             TextView txv = new TextView(context);
@@ -196,6 +287,9 @@ public class MultiSensors {
                     mSensorManager.getDefaultSensor(sensorstype_map.get(sensor)),
                     SensorManager.SENSOR_DELAY_FASTEST);
         }
+
+        mLocationManager = LocationManager;
+        initLocation();
 
         activityInference = new ActivityInference(context);
 
@@ -265,11 +359,13 @@ public class MultiSensors {
     private void uploadStop() {
         startUpload_acce = false;
         startUpload_gyro = false;
+        Uploading = false;
     }
 
     private void predictStop() {
         startPredict_acce = false;
         startPredict_gyro = false;
+        Predicting = false;
     }
 
     private RadioGroup.OnCheckedChangeListener rglistener = new RadioGroup.OnCheckedChangeListener(){
@@ -283,6 +379,164 @@ public class MultiSensors {
 
     };
 
+    private void initLocation() {
+        checkPermission(new String []{
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+                Manifest.permission.ACCESS_FINE_LOCATION
+        });
+
+        if (mLocationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+            txvResult.setText("GPS Provider");
+            String bestProvider = mLocationManager.getBestProvider(
+                    getLocationCriteria(), true);
+            // 获取位置信息
+            // 如果不设置查询要求，getLastKnownLocation方法传人的参数为LocationManager.GPS_PROVIDER
+            Location location = mLocationManager
+                    .getLastKnownLocation(LocationManager.GPS_PROVIDER);
+            updateLocation(location);
+            // 监听状态
+            mLocationManager.addGpsStatusListener(gpsStatusListener);
+            // 绑定监听，有4个参数
+            // 参数1，设备：有GPS_PROVIDER和NETWORK_PROVIDER两种
+            // 参数2，位置信息更新周期，单位毫秒
+            // 参数3，位置变化最小距离：当位置距离变化超过此值时，将更新位置信息
+            // 参数4，监听
+            // 备注：参数2和3，如果参数3不为0，则以参数3为准；参数3为0，则通过时间来定时更新；两者为0，则随时刷新
+
+            // 1秒更新一次，或最小位移变化超过1米更新一次；
+            // 注意：此处更新准确度非常低，推荐在service里面启动一个Thread，在run中sleep(10000);然后执行handler.sendMessage(),更新位置
+            mLocationManager.requestLocationUpdates(
+                    LocationManager.GPS_PROVIDER, 0, 0, locationListener);
+        }
+        else if (mLocationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+            txvResult.setText("NET Provider");
+            Location location = mLocationManager
+                    .getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+            updateLocation(location);
+            mLocationManager.addGpsStatusListener(gpsStatusListener);
+            mLocationManager.requestLocationUpdates(
+                    LocationManager.GPS_PROVIDER, 0, 0, locationListener);
+        }
+    }
+
+    private void checkPermission(String[] permissions) {
+        int permission_granted = PackageManager.PERMISSION_GRANTED;
+        boolean flag = false;
+        for (int i=0;i<permissions.length;i++){
+            int checkPermission = ActivityCompat.checkSelfPermission(context,permissions[i]);
+            if(permission_granted != checkPermission){
+                flag = true;
+                break;
+            }
+        }
+        if(flag){
+            ActivityCompat.requestPermissions(context,permissions,111);
+            return;
+        }
+    }
+
+    private Criteria getLocationCriteria() {
+        Criteria criteria = new Criteria();
+        // 设置定位精确度 Criteria.ACCURACY_COARSE比较粗略，Criteria.ACCURACY_FINE则比较精细
+        criteria.setAccuracy(Criteria.ACCURACY_FINE);
+        criteria.setSpeedRequired(true); // 设置是否要求速度
+        criteria.setCostAllowed(false); // 设置是否允许运营商收费
+        criteria.setBearingRequired(false); // 设置是否需要方位信息
+        criteria.setAltitudeRequired(false); // 设置是否需要海拔信息
+        criteria.setPowerRequirement(Criteria.POWER_LOW); // 设置对电源的需求
+        return criteria;
+    }
+
+    // 状态监听
+    GpsStatus.Listener gpsStatusListener = new GpsStatus.Listener() {
+        public void onGpsStatusChanged(int event) {
+            switch (event) {
+                case GpsStatus.GPS_EVENT_FIRST_FIX: // 第一次定位
+                    break;
+
+                case GpsStatus.GPS_EVENT_SATELLITE_STATUS: // 卫星状态改变
+                    checkPermission(new String []{
+                            Manifest.permission.ACCESS_COARSE_LOCATION,
+                            Manifest.permission.ACCESS_FINE_LOCATION
+                    });
+                    GpsStatus gpsStatus = mLocationManager.getGpsStatus(null); // 获取当前状态
+                    int maxSatellites = gpsStatus.getMaxSatellites(); // 获取卫星颗数的默认最大值
+                    Iterator<GpsSatellite> iters = gpsStatus.getSatellites()
+                            .iterator(); // 创建一个迭代器保存所有卫星
+                    int count = 0;
+                    while (iters.hasNext() && count <= maxSatellites) {
+                        GpsSatellite s = iters.next();
+                        count++;
+                    }
+                    break;
+
+                case GpsStatus.GPS_EVENT_STARTED: // 定位启动
+                    break;
+
+                case GpsStatus.GPS_EVENT_STOPPED: // 定位结束
+                    break;
+            }
+        };
+    };
+
+    // 位置监听
+    private LocationListener locationListener = new LocationListener() {
+
+        /**
+         * 位置信息变化时触发
+         */
+        public void onLocationChanged(Location location) {
+            // location.getAltitude(); -- 海拔
+           updateLocation(location);
+        }
+
+        /**
+         * GPS状态变化时触发
+         */
+        public void onStatusChanged(String provider, int status, Bundle extras) {
+            switch (status) {
+                case LocationProvider.AVAILABLE: // GPS状态为可见时
+                    break;
+
+                case LocationProvider.OUT_OF_SERVICE: // GPS状态为服务区外时
+                    break;
+
+                case LocationProvider.TEMPORARILY_UNAVAILABLE: // GPS状态为暂停服务时
+                    break;
+            }
+        }
+
+        /**
+         * GPS开启时触发
+         */
+        public void onProviderEnabled(String provider) {
+            checkPermission(new String []{
+                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                    Manifest.permission.ACCESS_FINE_LOCATION
+            });
+            Location location = mLocationManager.getLastKnownLocation(provider);
+            updateLocation(location);
+        }
+
+        /**
+         * GPS禁用时触发
+         */
+        public void onProviderDisabled(String provider) {
+            // updateView(null);
+        }
+
+    };
+
+    private void updateLocation(Location location) {
+        if (location != null) {
+            mLatitude = location.getLatitude();
+            mLongitude = location.getLongitude();
+            mSpeed = location.getSpeed();
+            txvResult.setText("\nLatitude: " + mLatitude
+                    + "\nLongitude: " + mLongitude
+                    + "\nSpeed: " + mSpeed);
+        }
+    }
 
     private SensorEventListener mSensorEventListener = new SensorEventListener() {
 
@@ -337,14 +591,19 @@ public class MultiSensors {
                             startPredict_acce = true;
                         }
                     }
-                    if (startUpload_acce && startUpload_gyro) {
+                    if (startUpload_acce && startUpload_gyro && !Uploading) {
+                        Uploading = true;
+                        startListen_grav = false;
+                        startListen_magn = false;
                         dataNum++;
                         String ra = real_activity;
                         startNum = acceNum - uploadWait;
                         stopNum = acceNum;
 
-                        boolean writecsv;
-                        writecsv = writeCSV();
+                        DataThread dt = new DataThread();
+                        dt.setMsgKey(uploadmsgKey);
+                        Thread t = new Thread(dt);
+                        t.start();
 
 //                        for (int i = startNum; i < stopNum; i++) {
 //                            Map<String, Float> SensorData = new LinkedHashMap<String, Float>();
@@ -359,17 +618,22 @@ public class MultiSensors {
 //
 //                            mDatabase.child("SensorDataSet").push().setValue(SensorData);
 //                        }
-                        if (writecsv) {
-                            txvResult.setText("Num: " + startNum + " to " + stopNum + " " + "Upload Num: " + dataNum + "\nSave Success");
-                        }
-                        else {
-                            txvResult.setText("Num: " + startNum + " to " + stopNum + " " + "Upload Num: " + dataNum + "\nSave Fail");
-                        }
-
-                        uploadStop();
-                        sensorStart();
+//                        boolean writecsv;
+//                        writecsv = writeCSV();
+//                        if (writecsv) {
+//                            txvResult.setText("Num: " + startNum + " to " + stopNum + " " + "Upload Num: " + dataNum + "\nSave Success");
+//                        }
+//                        else {
+//                            txvResult.setText("Num: " + startNum + " to " + stopNum + " " + "Upload Num: " + dataNum + "\nSave Fail");
+//                        }
+//
+//                        uploadStop();
+//                        sensorStart();
                     }
-                    if (startPredict_acce && startPredict_gyro) {
+                    if (startPredict_acce && startPredict_gyro && !Predicting) {
+                        Predicting = true;
+                        startListen_grav = false;
+                        startListen_magn = false;
                         float[] predictData = new float[input_width * channels];
                         int predictTime = acceNum / input_width - 1;
                         for (int i = 0; i < input_width; i++) {
@@ -380,7 +644,13 @@ public class MultiSensors {
                             predictData[i * channels + 4] = gyroDataSet.get(predictTime * input_width + i).getGyroscopeY();
                             predictData[i * channels + 5] = gyroDataSet.get(predictTime * input_width + i).getGyroscopeZ();
                         }
-                        activityPrediction(predictData);
+
+                        DataThread dt = new DataThread();
+                        dt.setData(predictData);
+                        dt.setMsgKey(predictmsgKey);
+                        Thread t = new Thread(dt);
+                        t.start();
+                        //activityPrediction(predictData);
                     }
                     break;
                 case Sensor.TYPE_GYROSCOPE:
@@ -388,7 +658,9 @@ public class MultiSensors {
                         txv.setText("Gyroscope"
                                 + "\nX: " + event.values[0]
                                 + "\nY: " + event.values[1]
-                                + "\nZ: " + event.values[2]);
+                                + "\nZ: " + event.values[2]
+                                + "\nLatitude: " + mLatitude
+                                + "\nLongitude: " + mLongitude);
 
                         gyroData gyroData = new gyroData(event.values[0], event.values[1], event.values[2]);
                         gyroDataSet.add(gyroData);
@@ -458,6 +730,7 @@ public class MultiSensors {
         String mFileName;
         String noGFileName;
         boolean initFile = false;
+        boolean initFilenoG = false;
 
         if(Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)){
             String path = Environment.getExternalStorageDirectory().getAbsolutePath();
@@ -469,23 +742,36 @@ public class MultiSensors {
         File folder = new File(folderName);
         if (!folder.exists()) {
             initFile = folder.mkdirs();
+            initFilenoG = initFile;
         }
 
         mFileName = folderName + "data.csv";
         noGFileName = folderName + "data_noG.csv";
         File file = new File(mFileName);
         File noGfile = new File(noGFileName);
+        if (!file.exists()) {
+            initFile = true;
+        }
+        if (!noGfile.exists()) {
+            initFilenoG = true;
+        }
 
         try {
 
             BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file, true), "GBK"), 1024);
             BufferedWriter noGbw = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(noGfile, true), "GBK"), 1024);
-            StringBuffer sbtitle = new StringBuffer();
+
             if (initFile) {
-                sbtitle.append(csvTitle + "\r\n");
+                StringBuffer sbtitle = new StringBuffer();
+                sbtitle.append(datacsvTitle + "\r\n");
+                bw.write(sbtitle.toString());
             }
-            bw.write(sbtitle.toString());
-            noGbw.write(sbtitle.toString());
+
+            if (initFilenoG) {
+                StringBuffer sbtitle = new StringBuffer();
+                sbtitle.append(datacsvTitle + "\r\n");
+                noGbw.write(sbtitle.toString());
+            }
 
             for (int i = startNum; i < stopNum; i++) {
                 StringBuffer sbdata = new StringBuffer();
@@ -528,6 +814,58 @@ public class MultiSensors {
         }
         return false;
     }
+    private boolean writeTest(String predict, String real, long timeNow)
+    {
+        String folderName = null;
+        String mFileName;
+        boolean initFile = false;
+
+        if(Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)){
+            String path = Environment.getExternalStorageDirectory().getAbsolutePath();
+            if (path != null) {
+                folderName = path +"/ActivityCSV/";
+            }
+        }
+
+        File folder = new File(folderName);
+        if (!folder.exists()) {
+            initFile = folder.mkdirs();
+        }
+
+        mFileName = folderName + "test.csv";
+        File file = new File(mFileName);
+        if (!file.exists()) {
+            initFile = true;
+        }
+
+        try {
+
+            BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file, true), "GBK"), 1024);
+            if (initFile) {
+                StringBuffer sbtitle = new StringBuffer();
+                sbtitle.append(testcsvTitle + "\r\n");
+                bw.write(sbtitle.toString());
+            }
+            SimpleDateFormat sdf= new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
+            java.util.Date dt = new Date(timeNow);
+            String sDateTime = sdf.format(dt);
+
+            StringBuffer sbdata = new StringBuffer();
+            sbdata.append(predict + ",");
+            sbdata.append(real + ",");
+            sbdata.append(sDateTime + "\r\n");
+            bw.write(sbdata.toString());
+
+            bw.flush();
+            bw.close();
+
+            return true;
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
 
     private void activityPrediction(float[] predictData)
     {
@@ -546,20 +884,24 @@ public class MultiSensors {
         }
         test_accuracy = rightPredictNum / allPredictNum;
 
-        Map<String, String> activityAccuracy = new LinkedHashMap<String, String>();
-        activityAccuracy.put("Predict", activityItems[maxIndex]);
-        activityAccuracy.put("Ground Truth", real_activity);
-        mDatabase.child("TestAccuracy").push().setValue(activityAccuracy);
+        boolean writeTest;
+        writeTest = writeTest(activityItems[maxIndex], real_activity, MainActivity.timeNow);
 
-        predicttxv.setText("\n" + activityItems[0] + ": " + String.format("%.8f", results[0])
-                + "\n" + activityItems[1] + ": " + String.format("%.8f", results[1])
-                + "\n" + activityItems[2] + ": " + String.format("%.8f", results[2])
-                + "\n" + activityItems[3] + ": " + String.format("%.8f", results[3])
-                + "\n" + activityItems[4] + ": " + String.format("%.8f", results[4])
-                + "\n" + activityItems[5] + ": " + String.format("%.8f", results[5])
-                + "\n\nResult: " + activityItems[maxIndex] + " " + String.format("%.8f", results[maxIndex])
-                + "\n" + rightPredictNum + " " + allPredictNum
-                + "\nTest Accuracy: " + String.format("%.8f", test_accuracy));
+        if (writeTest) {
+            predicttxv.setText("\nSave Predict Success"
+                    + "\n" + activityItems[0] + ": " + String.format("%.8f", results[0])
+                    + "\n" + activityItems[1] + ": " + String.format("%.8f", results[1])
+                    + "\n" + activityItems[2] + ": " + String.format("%.8f", results[2])
+                    + "\n" + activityItems[3] + ": " + String.format("%.8f", results[3])
+                    + "\n" + activityItems[4] + ": " + String.format("%.8f", results[4])
+                    + "\n" + activityItems[5] + ": " + String.format("%.8f", results[5])
+                    + "\n\nResult: " + activityItems[maxIndex] + " " + String.format("%.8f", results[maxIndex])
+                    + "\n" + rightPredictNum + " " + allPredictNum
+                    + "\nTest Accuracy: " + String.format("%.8f", test_accuracy));
+        }
+        else {
+            predicttxv.setText("\nSave Predict Fail");
+        }
 
 
 //        if (!activityItems[maxIndex].equals(last_activity) || last_activity.equals(null)) {

@@ -21,17 +21,17 @@ data_index = 0
 model_index = 0
 
 model_folder_name = os.path.join(home, "Activity_Source/Model/model")
-model_file_name = "ActivityCNNRNN"
+model_file_name = "ActivityRNN"
 
 model_info_file_name = os.path.join(home, "Activity_Source/Model/model_info.csv")
-model_info_type = ["Model Name", "Model Index", "Data Index", "Test Accuracy", "DataNum", "Timestep", "Batch Size", "Epoch", "Lstm Size", "Dense Size", "Model Layer"]
-layer_info = "CNN + RNN"
+model_info_type = ["Model Name", "Model Index", "Data Index", "Test Accuracy", "Data Number", "Timestep", "Batch Size", "Epoch", "Lstm Size", "Dense Size", "Model Layer"]
+layer_info = "RNN"
 class_type = ["Biking", "In Vehicle", "Running", "Still", "Tilting", "Walking"]
 
 # About ML
 DATA_NUM = 0
 input_height = 1
-input_width = 500
+input_width = 800
 input_size = input_height * input_width
 num_channels = 6
 num_labels = 6
@@ -40,7 +40,8 @@ lstm_size = [256,256]
 dense_size = [512,512]
 
 learning_rate = 0.0001
-epoch_num = 3000
+epoch_num = 2000
+stop_epoch = 0
 epoch_start = 0
 iters = 0
 batch_size = 128
@@ -59,15 +60,16 @@ def read_data():
     global csv_folder_name
     global data_file_name
 
-    data_path = csv_folder_name + data_file_name + '.csv'
+    data_index = 2
+    data_path = os.path.join(csv_folder_name, csv_file_name + str(data_index) + '.csv')
     new_data = list(csv.reader(open(data_path,'r')))
     new_data = np.array(new_data[1:]).astype(float)
 
-    act = new_data[:,0].astype(int)
-    one_hot = np.zeros((act.size, num_labels))
-    one_hot[np.arange(act.size), act] = 1
+    # act = new_data[:,0].astype(int)
+    # one_hot = np.zeros((act.size, num_labels))
+    # one_hot[np.arange(act.size), act] = 1
 
-    new_data = np.hstack((one_hot, new_data[:,1:]))
+    # new_data = np.hstack((one_hot, new_data[:,1:]))
     print (new_data.shape)
 
     return new_data
@@ -97,10 +99,6 @@ def write_data():
 
         new_data = np.hstack((one_hot, new_data[:,1:]))
         print (new_data.shape)
-
-        # get last data path
-        while os.path.exists(csv_path_name + str(data_index) + ".csv"):
-            data_index += 1
 
         #write new data to csv
         if data_index != 0:
@@ -338,7 +336,7 @@ def write_result(test_accuracy):
     global layer_info
 
     # **Write model information to csv
-    minfo = [model_file_name, model_index, data_index, test_accuracy, DATA_NUM, input_width, batch_size, epoch_num, lstm_size, dense_size]
+    minfo = [model_file_name, model_index, data_index, test_accuracy, DATA_NUM, input_width, batch_size, stop_epoch, lstm_size, dense_size]
     print (minfo)
     if not os.path.exists(model_info_file_name):
         model_info_file = open(model_info_file_name, "w")
@@ -351,100 +349,6 @@ def write_result(test_accuracy):
         model_info_w.writerow(minfo)
 
 # ML layer
-def weight_variable(shape):
-    initial = tf.truncated_normal(shape, stddev = 0.1)
-    return tf.Variable(initial)
-
-def bias_variable(shape):
-    initial = tf.constant(0.0, shape = shape)
-    return tf.Variable(initial)
-    
-def apply_depthwise_conv(x,kernel_size,num_channels,depth):
-    weights = weight_variable([1, kernel_size, num_channels, depth])
-    biases = bias_variable([depth * num_channels])
-
-    # filter = weigths, shape=[filter_height, filter_width, in_channels, channel_multiplier]
-    #                  =[1, kernel_size, num_channels, depth]
-    # output_channels = in_channels * channel_multiplier
-    output_conv = tf.nn.depthwise_conv2d(x,weights, [1, 1, 1, 1], padding='VALID')
-
-    return tf.nn.relu(tf.add(output_conv,biases))
-    
-def apply_max_pool(x,kernel_size,stride_size):
-    return tf.layers.max_pooling2d(inputs=x, pool_size=[1, kernel_size], strides=stride_size)
-
-
-def conv_op(input_op,name,kh,kw,n_out,dh,dw,p):
-
-    n_in = input_op.get_shape()[-1].value
-    with tf.name_scope(name) as scope:
-        kernel = weight_variable([kh,kw,n_in,n_out])
-        #kernel = tf.get_variable("w",shape=[kh,kw,n_in,n_out],dtype=tf.float32,initializer=tf.contrib.layers.xavier_initializer_conv2d())
-        conv = tf.nn.conv2d(input_op, kernel, (1,dh,dw,1),padding='SAME')
-        bias_init_val = tf.constant(0.0, shape=[n_out],dtype=tf.float32)
-        biases = tf.Variable(bias_init_val , trainable=True , name='b')
-        z = tf.nn.bias_add(conv,biases)
-        activation = tf.nn.relu(z,name=scope)
-        p += [kernel,biases]
-        return activation
-
-def fc_op(input_op,name,n_out,p):
-    n_in = input_op.get_shape()[-1].value
-    with tf.name_scope(name) as scope:
-        kernel = weight_variable([n_in,n_out])
-        #kernel = tf.get_variable(scope+'w',shape=[n_in,n_out],dtype=tf.float32,initializer=tf.contrib.layers.xavier_initializer_conv2d())
-        biases = tf.Variable(tf.constant(0.1,shape=[n_out],dtype=tf.float32),name='b')
-
-        activation = tf.nn.relu_layer(input_op,kernel,biases,name=scope)
-        p += [kernel,biases]
-        return activation
-
-def mpool_op(input_op,name,kh,kw,dh,dw):
-    return tf.nn.max_pool(input_op,ksize=[1,kh,kw,1],strides=[1,dh,dw,1],padding='SAME',name=name)
-
-def inference_op(input_op,keep_prob):
-    p = []
-    conv1_1 = conv_op(input_op,name='conv1_1',kh=1,kw=3,n_out=64,dh=1,dw=1,p=p)
-    conv1_2 = conv_op(conv1_1,name='conv1_2',kh=1,kw=3,n_out=64,dh=1,dw=1,p=p)
-    pool1 = mpool_op(conv1_2,name='pool1',kh=1,kw=3,dw=1,dh=1)
-
-    conv2_1 = conv_op(pool1,name='conv2_1',kh=1,kw=3,n_out=128,dh=1,dw=1,p=p)
-    conv2_2 = conv_op(conv2_1,name='conv2_2',kh=1,kw=3,n_out=128,dh=1,dw=1,p=p)
-    pool2 = mpool_op(conv2_2, name='pool2', kh=1, kw=3, dw=1, dh=1)
-
-    conv3_1 = conv_op(pool2, name='conv3_1', kh=1, kw=3, n_out=256, dh=1, dw=1, p=p)
-    conv3_2 = conv_op(conv3_1, name='conv3_2', kh=1, kw=3, n_out=256, dh=1, dw=1, p=p)
-    conv3_3 = conv_op(conv3_2, name='conv3_3', kh=1, kw=3, n_out=256, dh=1, dw=1, p=p)
-    pool3 = mpool_op(conv3_3, name='pool3', kh=1, kw=3, dw=1, dh=1)
-
-    conv4_1 = conv_op(pool3, name='conv4_1', kh=1, kw=3, n_out=512, dh=1, dw=1, p=p)
-    conv4_2 = conv_op(conv4_1, name='conv4_2', kh=1, kw=3, n_out=512, dh=1, dw=1, p=p)
-    conv4_3 = conv_op(conv4_2, name='conv4_3', kh=1, kw=3, n_out=512, dh=1, dw=1, p=p)
-    pool4 = mpool_op(conv4_3, name='pool4', kh=1, kw=3, dw=1, dh=1)
-
-    conv5_1 = conv_op(pool4, name='conv5_1', kh=1, kw=3, n_out=512, dh=1, dw=1, p=p)
-    conv5_2 = conv_op(conv5_1, name='conv5_2', kh=1, kw=3, n_out=512, dh=1, dw=1, p=p)
-    conv5_3 = conv_op(conv5_2, name='conv5_3', kh=1, kw=3, n_out=512, dh=1, dw=1, p=p)
-    pool5 = mpool_op(conv5_3, name='pool5', kh=1, kw=3, dw=1, dh=1)
-
-    print (conv1_1.get_shape())
-    print (conv1_2.get_shape())
-    print (pool1.get_shape())
-    print (pool2.get_shape())
-    print (pool3.get_shape())
-    print (pool4.get_shape())
-    print (pool5.get_shape())
-    # shp = pool5.get_shape()
-    # flattened_shape = shp[1].value * shp[2].value * shp[3].value
-    # resh1 = tf.reshape(pool5,[-1,flattened_shape],name="resh1")
-
-    # fc6 = fc_op(resh1,name="fc6",n_out=2048,p=p)
-    # fc6_drop = tf.nn.dropout(fc6,keep_prob,name='fc6_drop')
-    # fc7 = fc_op(fc6_drop,name="fc7",n_out=2048,p=p)
-    # fc7_drop = tf.nn.dropout(fc7,keep_prob,name="fc7_drop")
-    # fc8 = fc_op(fc7_drop,name="fc8",n_out=1000,p=p)
-
-    return pool5
 
 def RNN_op(input_op, keep_prob):
     mlstm_cell = []
@@ -463,14 +367,15 @@ def RNN_op(input_op, keep_prob):
     state = init_state
     with tf.variable_scope('RNN'):
         input_shape = input_op.get_shape().as_list()
-        timestep_X = inference_op(input_op,keep_prob)
-        #timestep_X = input_op
+        #timestep_X = inference_op(input_op,keep_prob)
+        timestep_X = input_op
         shp = timestep_X.get_shape()
 
-        timestep_cell = tf.reshape(timestep_X, [-1,shp[2],shp[3]])
+        # timestep_X = tf.unstack(timestep_X,axis=2)
         outputs, state = tf.nn.dynamic_rnn(cell=mlstm_cell,
-                                   inputs=timestep_cell,
+                                   inputs=timestep_X,
                                    dtype=tf.float32)
+        # outputs = tf.transpose(outputs, [1, 0, 2])[-1]
         
 
     #     for timestep in range(shp[2]):
@@ -479,10 +384,10 @@ def RNN_op(input_op, keep_prob):
     #         # Variable "state" store the LSTM state
     #         # timestep_X = tf.reshape(input_op[:,timestep,:,:], [-1,1,input_width,num_channels])
     #         # timestep_cell = inference_op(timestep_X,keep_prob)
-    #         timestep_cell = timestep_X[:,:,timestep,:]
-    #         timestep_cell = tf.reshape(timestep_cell, [-1,timestep_cell.get_shape()[-1]])
+    #         # timestep_cell = timestep_X[:,:,timestep,:]
+    #         # timestep_cell = tf.reshape(timestep_cell, [-1,timestep_cell.get_shape()[-1]])
 
-    #         (cell_output, state) = mlstm_cell(timestep_cell, state)
+    #         (cell_output, state) = mlstm_cell(timestep_X[:,timestep,:], state)
     #         outputs.append(cell_output)
 
     # outputs = outputs[-1]
@@ -526,7 +431,7 @@ print (testY.shape)
 # **Build CNN
 
 X_ = tf.placeholder(tf.float32, shape=[None,input_height*input_width*num_channels], name="input_x")
-X = tf.reshape(X_, [-1,input_height,input_width,num_channels])
+X = tf.reshape(X_, [-1,input_width,num_channels])
 Y = tf.placeholder(tf.float32, shape=[None,num_labels], name="input_y")
 
 keep_prob = tf.placeholder(tf.float32)
@@ -549,7 +454,7 @@ keep_prob = tf.placeholder(tf.float32)
 # for i in range(len(dense_size)):
 #     logits = tf.layers.dense(inputs=logits, units=dense_size[i], activation=tf.nn.relu)
 h_state = RNN_op(X, keep_prob)
-# logits = h_state
+#logits = h_state
 
 shp = h_state.get_shape()
 flattened_shape = shp[1].value * shp[2].value
@@ -563,7 +468,7 @@ for i in range(len(dense_size)):
 W = tf.Variable(tf.truncated_normal([dense_size[-1], num_labels], stddev=0.1), dtype=tf.float32)
 bias = tf.Variable(tf.constant(0.1,shape=[num_labels]), dtype=tf.float32)
 Y_pre = tf.nn.softmax(tf.matmul(logits, W) + bias, name = "prediction")
-#Y_pre = tf.nn.softmax(logits, name = "prediction")
+# Y_pre = tf.nn.softmax(logits, name = "prediction")
 
 # h_state is the output of hidden layer
 # Weight, Bias, Softmax to predict
@@ -598,21 +503,31 @@ init = tf.global_variables_initializer()
 out = tf.identity(Y_pre, name="output")
 
 with tf.Session(config=config) as sess:
+    num99 = 0
     sess.run(init)
     for epoch in range(epoch_num):
         batch_X, batch_Y, epoch_start = next_batch(trainX, trainY, batch_size, epoch_start)
-        if (epoch+1)%200 == 0:
-            train_accuracy = sess.run(accuracy, feed_dict={
+        train_accuracy = sess.run(accuracy, feed_dict={
                 X_:batch_X, Y: batch_Y, keep_prob:0.5})
+        if train_accuracy > 0.99:
+            num99 += 1
+            if num99 > 10:
+                stop_epoch = epoch
+                break
+        if (epoch+1)%200 == 0:
+            # train_accuracy = sess.run(accuracy, feed_dict={
+            #     X_:batch_X, Y: batch_Y, keep_prob:0.5})
             #print ("Iter%d, step %d, training accuracy %g" % ( mnist.train.epochs_completed, (i+1), accuracy))
             print ("Iter%d, Epoch %d, Training Accuracy %g" % ( iters, (epoch+1), train_accuracy))
         sess.run(optimizer, feed_dict={X_: batch_X, Y: batch_Y, keep_prob:0.5})
 
+    print ("Num 99 %g"% num99)
+    print ("Epoch Num %g"% stop_epoch)
     test_accuracy = sess.run(accuracy, feed_dict={
         X_: testX, Y: testY, keep_prob:0.5})
     print ("Test Accuracy %g"% test_accuracy)
 
-    if test_accuracy > 0.8:
+    if test_accuracy > 0.75:
         frozen_tensors = [out]
         frozen_graphdef = tf.graph_util.convert_variables_to_constants(sess, sess.graph_def, list(map(canonical_name, frozen_tensors)))
         # save ckpt & pb, return pb path

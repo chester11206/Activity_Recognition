@@ -3,14 +3,17 @@ package com.example.jh.activity;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.hardware.SensorManager;
 import android.Manifest;
+import android.location.LocationManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.provider.Settings;
 import android.support.annotation.NonNull;
 import android.support.design.widget.TabLayout;
 import android.support.v4.app.ActivityCompat;
@@ -45,10 +48,12 @@ public class MainActivity extends AppCompatActivity {
     public Activity context = this;
     public static final String TAG = "Activity";
     private static final int REQUEST_CODE_WRITE_EXTERNAL_STORAGE_PERMISSION = 1;
+    private static final int REQUEST_CODE_LOCATION_PERMISSION = 1001;
     TextView txvResult;
 
     private MultiSensors multiSensorsapi;
     private SensorManager mSensorManager;
+    private LocationManager mLocationManager;
 
     private ViewPager mViewPager;
     private TabLayout mTabLayout;
@@ -104,6 +109,7 @@ public class MainActivity extends AppCompatActivity {
             // Request user to grant write external storage permission.
             ActivityCompat.requestPermissions(context, new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, REQUEST_CODE_WRITE_EXTERNAL_STORAGE_PERMISSION);
         }
+        initGPS();
     }
 
     /** Show Now Time */
@@ -146,6 +152,33 @@ public class MainActivity extends AppCompatActivity {
         mTime.setText("\t" + dateFormat.format(TimeNow));
     }
 
+    private void initGPS() {
+        mLocationManager = (LocationManager) getApplicationContext().getSystemService(Context.LOCATION_SERVICE); // 位置
+        if (!mLocationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+            // TODO: Open GPS
+            Toast.makeText(context.getApplicationContext(), "Please open your GPS", Toast.LENGTH_SHORT).show();
+            final AlertDialog.Builder dialog = new AlertDialog.Builder(context);
+            dialog.setTitle("Open GPS");
+            dialog.setMessage("To detect your speed, please open your GPS");
+            dialog.setPositiveButton("OK", new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface arg0, int arg1) {
+                    // 转到手机设置界面，用户设置GPS
+                    Intent intent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+                    Toast.makeText(context.getApplicationContext(), "Open GPS and then click the return button", Toast.LENGTH_SHORT).show();
+                    context.startActivityForResult(intent, 0); // 设置完成后返回到原来的界面
+                }
+            });
+            dialog.setNeutralButton("Cancel", new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface arg0, int arg1) {
+                    arg0.dismiss();
+                }
+            });
+            dialog.show();
+        }
+    }
+
     /** Activity Result */
     @Override
     protected void onResume() {
@@ -153,19 +186,37 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {}
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if(requestCode == 0){
+            if (mLocationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)){
+                initGPS();
+            }
+        }
+    }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
 
-        if (requestCode == REQUEST_CODE_WRITE_EXTERNAL_STORAGE_PERMISSION) {
-            int grantResultsLength = grantResults.length;
-            if (grantResultsLength > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                Toast.makeText(getApplicationContext(), "You grant write external storage permission. Please click original button again to continue.", Toast.LENGTH_LONG).show();
-            } else {
-                Toast.makeText(getApplicationContext(), "You denied write external storage permission.", Toast.LENGTH_LONG).show();
-            }
+        switch (requestCode) {
+            case REQUEST_CODE_WRITE_EXTERNAL_STORAGE_PERMISSION:
+                int grantResultsLength_write = grantResults.length;
+                if (grantResultsLength_write > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    Toast.makeText(getApplicationContext(), "You grant write external storage permission. Please click original button again to continue.", Toast.LENGTH_LONG).show();
+                } else {
+                    Toast.makeText(getApplicationContext(), "You denied write external storage permission.", Toast.LENGTH_LONG).show();
+                }
+                break;
+            case REQUEST_CODE_LOCATION_PERMISSION:
+                int grantResultsLength_location = grantResults.length;
+                if (grantResultsLength_location > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    Toast.makeText(getApplicationContext(), "You grant location permission. Please click original button again to continue.", Toast.LENGTH_LONG).show();
+                } else {
+                    Toast.makeText(getApplicationContext(), "You denied location permission.", Toast.LENGTH_LONG).show();
+                }
+
+            default:
+                break;
         }
     }
 
@@ -206,7 +257,7 @@ public class MainActivity extends AppCompatActivity {
                             }
                             else {
                                 mSensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
-                                multiSensorsapi.start(context, mSensorManager, multiSensors_list);
+                                multiSensorsapi.start(context, mSensorManager, multiSensors_list, mLocationManager);
                             }
                         }
                     });
