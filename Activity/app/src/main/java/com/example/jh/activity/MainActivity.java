@@ -109,7 +109,6 @@ public class MainActivity extends AppCompatActivity {
             // Request user to grant write external storage permission.
             ActivityCompat.requestPermissions(context, new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, REQUEST_CODE_WRITE_EXTERNAL_STORAGE_PERMISSION);
         }
-        initGPS();
     }
 
     /** Show Now Time */
@@ -152,9 +151,11 @@ public class MainActivity extends AppCompatActivity {
         mTime.setText("\t" + dateFormat.format(TimeNow));
     }
 
-    private void initGPS() {
+    private boolean initGPS() {
         mLocationManager = (LocationManager) getApplicationContext().getSystemService(Context.LOCATION_SERVICE); // 位置
-        if (!mLocationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+        boolean haveGPS = mLocationManager.isProviderEnabled(LocationManager.GPS_PROVIDER);
+
+        if (!haveGPS) {
             // TODO: Open GPS
             Toast.makeText(context.getApplicationContext(), "Please open your GPS", Toast.LENGTH_SHORT).show();
             final AlertDialog.Builder dialog = new AlertDialog.Builder(context);
@@ -167,6 +168,7 @@ public class MainActivity extends AppCompatActivity {
                     Intent intent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
                     Toast.makeText(context.getApplicationContext(), "Open GPS and then click the return button", Toast.LENGTH_SHORT).show();
                     context.startActivityForResult(intent, 0); // 设置完成后返回到原来的界面
+
                 }
             });
             dialog.setNeutralButton("Cancel", new DialogInterface.OnClickListener() {
@@ -177,6 +179,8 @@ public class MainActivity extends AppCompatActivity {
             });
             dialog.show();
         }
+
+        return haveGPS;
     }
 
     /** Activity Result */
@@ -187,11 +191,11 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if(requestCode == 0){
-            if (mLocationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)){
-                initGPS();
-            }
-        }
+//        if(requestCode == 0){
+//            if (mLocationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)){
+//                initGPS();
+//            }
+//        }
     }
 
     @Override
@@ -251,13 +255,21 @@ public class MainActivity extends AppCompatActivity {
                         public void onClick(View view) {
                             txvResult = (TextView) findViewById(R.id.multisensorstxView);
                             txvResult.setMovementMethod(new ScrollingMovementMethod());
-                            if (multiSensors_list.size() <= 0){
-                                txvResult.setText("You haven't choose the sensors!");
-
-                            }
-                            else {
+//                            if (multiSensors_list.size() <= 0){
+//                                txvResult.setText("You haven't choose the sensors!");
+//
+//                            }
+//                            else {
+//                                boolean haveGPS = initGPS();
+//                                if (haveGPS) {
+//                                    mSensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
+//                                    multiSensorsapi.start(context, mSensorManager, multiSensors_list);
+//                                }
+//                            }
+                            boolean haveGPS = initGPS();
+                            if (haveGPS) {
                                 mSensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
-                                multiSensorsapi.start(context, mSensorManager, multiSensors_list, mLocationManager);
+                                multiSensorsapi.start(context, mSensorManager, multiSensorItems);
                             }
                         }
                     });
@@ -301,7 +313,7 @@ public class MainActivity extends AppCompatActivity {
         // Inflate the menu; this adds items to the action bar if it is present.
         switch (mViewPager.getCurrentItem()) {
             case 0:
-                getMenuInflater().inflate(R.menu.multisensors_menu, menu);
+                //getMenuInflater().inflate(R.menu.multisensors_menu, menu);
                 break;
             default:
                 break;

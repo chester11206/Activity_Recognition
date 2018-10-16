@@ -66,37 +66,37 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textSize="@dimen/activity_textSize"
-                    android:text="Still" />
+                    android:text="Biking" />
                 <RadioButton
                     android:id="@+id/chkwalking"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textSize="@dimen/activity_textSize"
-                    android:text="Walking" />
+                    android:text="In Vehicle" />
                 <RadioButton
                     android:id="@+id/chkrunning"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textSize="@dimen/activity_textSize"
-                    android:text="Running" />
+                    android:text="MRT" />
                 <RadioButton
                     android:id="@+id/chkbiking"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textSize="@dimen/activity_textSize"
-                    android:text="Biking" />
+                    android:text="Running" />
                 <RadioButton
                     android:id="@+id/chkin_vehicle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textSize="@dimen/activity_textSize"
-                    android:text="In Vehicle" />
+                    android:text="Still" />
                 <RadioButton
                     android:id="@+id/chktilting"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textSize="@dimen/activity_textSize"
-                    android:text="Tilting" />
+                    android:text="Walking" />
             </RadioGroup>
             <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
                 xmlns:tools="http://schemas.android.com/tools"
