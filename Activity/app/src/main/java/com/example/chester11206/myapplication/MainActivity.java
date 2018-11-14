@@ -1,4 +1,4 @@
-package com.example.jh.activity;
+package com.example.chester11206.myapplication;
 
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -33,6 +33,8 @@ import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import com.google.android.gms.location.FusedLocationProviderClient;
 
 import java.text.DateFormat;
 import java.util.ArrayList;
@@ -77,7 +79,7 @@ public class MainActivity extends AppCompatActivity {
         new TimeThread().start();
 
         /** init three api */
-        multiSensorsapi = new com.example.jh.activity.MultiSensors();
+        multiSensorsapi = new com.example.chester11206.myapplication.MultiSensors();
 
         /** set viewpage and layout */
         mViewPager = (ViewPager) findViewById(R.id.container);
@@ -225,7 +227,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-        /** Viewpage Setting */
+    /** Viewpage Setting */
     private void setupViewPager(ViewPager viewPager) {
 
         MyViewPagerAdapter adapter = new MyViewPagerAdapter();
@@ -398,4 +400,5 @@ public class MainActivity extends AppCompatActivity {
         return dialog;
     }
 }
+
 

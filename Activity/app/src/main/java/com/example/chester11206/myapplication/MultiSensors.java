@@ -1,11 +1,8 @@
-package com.example.jh.activity;
+package com.example.chester11206.myapplication;
 
 import android.Manifest;
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.Context;
-import android.content.DialogInterface;
-import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
@@ -18,13 +15,10 @@ import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.location.LocationProvider;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Message;
-import android.provider.Settings;
-import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.text.method.ScrollingMovementMethod;
 import android.util.TypedValue;
@@ -34,43 +28,28 @@ import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.TextView;
-import android.widget.Toast;
 
-import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationCallback;
+import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationResult;
+import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.tasks.OnSuccessListener;
-import com.google.android.gms.tasks.Task;
-import com.google.firebase.database.DatabaseReference;
-import com.google.firebase.database.FirebaseDatabase;
-import com.google.firebase.database.IgnoreExtraProperties;
-import com.google.firebase.ml.common.FirebaseMLException;
-import com.google.firebase.ml.custom.FirebaseModelDataType;
-import com.google.firebase.ml.custom.FirebaseModelInputOutputOptions;
-import com.google.firebase.ml.custom.FirebaseModelInputs;
-import com.google.firebase.ml.custom.FirebaseModelInterpreter;
-import com.google.firebase.ml.custom.FirebaseModelManager;
-import com.google.firebase.ml.custom.FirebaseModelOptions;
-import com.google.firebase.ml.custom.FirebaseModelOutputs;
-import com.google.firebase.ml.custom.model.FirebaseCloudModelSource;
-import com.google.firebase.ml.custom.model.FirebaseModelDownloadConditions;
 
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStreamWriter;
-import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
-import java.util.Collections;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import static java.text.DateFormat.getDateTimeInstance;
-
-public class MultiSensors {
+public class MultiSensors{
     public Activity context;
     public static final String TAG = "MultiSensorsApi";
     LinearLayout ll;
@@ -84,20 +63,12 @@ public class MultiSensors {
     private ActivityInference activityInference;
     private SensorManager mSensorManager;
 
-    private LocationManager mLocationManager;
-    private mLocationListener mGPSListener;
-    private mLocationListener mNETListener;
-    private Location mGPSLocation;
-    private Location mNETLocation;
-    private Location mLocation;
-    private String bestProvider;
-
-    private float mSpeed = 0;
-    private double mLatitude = 0;
-    private double mLongitude = 0;
-    private int mIndoor = 0;
-    private int outdoorcount = 0;
-    private int indoorcount = 0;
+    private FusedLocationProviderClient mFusedLocationProviderClient;
+    private LocationRequest mLocationRequest;
+    private LocationCallback mLocationCallback;
+    private locData mLocData = new locData(0,0,0,1);
+    private boolean hasGPS;
+    private boolean hasThread = false;
 
     private String [] activityItems = null;
     private String real_activity = null;
@@ -161,10 +132,9 @@ public class MultiSensors {
         Map<String, Integer> myMap = new LinkedHashMap<String, Integer>();
         myMap.put("Biking", 0);
         myMap.put("In Vehicle", 1);
-        myMap.put("MRT", 2);
-        myMap.put("Running", 3);
-        myMap.put("Still", 4);
-        myMap.put("Walking", 5);
+        myMap.put("Running", 2);
+        myMap.put("Still", 3);
+        myMap.put("Walking", 4);
         return myMap;
     }
 
@@ -211,7 +181,7 @@ public class MultiSensors {
         private double Latitude = 0;
         private double Longitude = 0;
         private float Speed = 0;
-        private int Indoor = 0;
+        private int Indoor = 1;
 
         public locData (double La, double Lo, float Sp, int Ind) {
             Latitude = La;
@@ -219,6 +189,7 @@ public class MultiSensors {
             Speed = Sp;
             Indoor = Ind;
         }
+
         public double getLatitude() {return Latitude;}
         public double getLongitude() {return Longitude;}
         public float getSpeed() {return Speed;}
@@ -262,62 +233,18 @@ public class MultiSensors {
                 case locationmsgKey:
                     do {
                         try {
-                            checkPermission(new String []{
-                                    Manifest.permission.ACCESS_COARSE_LOCATION,
-                                    Manifest.permission.ACCESS_FINE_LOCATION
-                            });
-                            if (mLocationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) && mLocationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                                if (mGPSLocation == null) {
-                                    mLocation = mNETLocation;
-                                }
-                                else
-                                {
-                                    if (mNETLocation == null) {
-                                        mLocation = mGPSLocation;
-                                    }
-                                    else {
-                                        Criteria mCriteria = getLocationCriteria();
-                                        bestProvider = mLocationManager.getBestProvider(mCriteria, true);
-                                        switch (bestProvider) {
-                                            case LocationManager.GPS_PROVIDER:
-                                                mLocation = mGPSLocation;
-                                                break;
-                                            case LocationManager.NETWORK_PROVIDER:
-                                                mLocation = mNETLocation;
-                                                break;
-                                            default:
-                                                break;
-                                        }
-                                    }
-                                }
-
-                                Message message = new Message();
-                                message.what = this.msgKey;
-                                mHandler.sendMessage(message);
-
-//                                mLocation = mLocationManager.getLastKnownLocation(bestProvider);
-//                                if (mLocation != null) {
-//                                    Message message = new Message();
-//                                    message.what = this.msgKey;
-//                                    mHandler.sendMessage(message);
-//                                } else {
-//                                    if (bestProvider == LocationManager.GPS_PROVIDER) {
-//                                        bestProvider = LocationManager.NETWORK_PROVIDER;
-//                                    } else {
-//                                        bestProvider = LocationManager.GPS_PROVIDER;
-//                                    }
-//                                    mLocation = mLocationManager.getLastKnownLocation(bestProvider);
-//                                    Message message = new Message();
-//                                    message.what = this.msgKey;
-//                                    mHandler.sendMessage(message);
-//                                }
+                            if (!hasGPS) {
+                                mLocData = new locData(0,
+                                        0,
+                                        0, 1);
                             }
-
-                            Thread.sleep(500);
+                            hasGPS = false;
+                            Thread.sleep(2000);
                         } catch (InterruptedException e) {
                             e.printStackTrace();
                         }
-                    } while (true);
+                    } while (!hasGPS);
+                    hasThread = false;
                 default:
                     break;
 
@@ -347,9 +274,6 @@ public class MultiSensors {
                     Bundle predictbData = msg.getData();
                     float [] predictData = predictbData.getFloatArray("Data");
                     activityPrediction(predictData);
-                    break;
-                case locationmsgKey:
-                    displayLocation(mLocation);
                     break;
                 default:
                     break;
@@ -478,34 +402,36 @@ public class MultiSensors {
     };
 
     private void initLocation() {
-        mLocationManager = (LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
+        mFusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(context);
         checkPermission(new String []{
                 Manifest.permission.ACCESS_COARSE_LOCATION,
                 Manifest.permission.ACCESS_FINE_LOCATION
         });
 
-        if (mLocationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) && mLocationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-//            Criteria mCriteria = getLocationCriteria();
-//            bestProvider = mLocationManager.getBestProvider(mCriteria, true);
-//            mLocation = mLocationManager.getLastKnownLocation(bestProvider);
-//            displayLocation(mLocation);
+        mFusedLocationProviderClient.getLastLocation().addOnSuccessListener(context, new OnSuccessListener<Location>() {
+            @Override
+            public void onSuccess(Location location) {
+            }
+        });
 
-            mLocationManager.addGpsStatusListener(gpsStatusListener);
-            mGPSListener = new mLocationListener(LocationManager.GPS_PROVIDER);
-            mNETListener = new mLocationListener(LocationManager.NETWORK_PROVIDER);
-            mLocationManager.requestLocationUpdates(
-                    LocationManager.GPS_PROVIDER, 0, 0, mGPSListener);
-            mLocationManager.requestLocationUpdates(
-                    LocationManager.NETWORK_PROVIDER, 0, 0, mNETListener);
+        mLocationRequest = new LocationRequest();
+        mLocationRequest.setInterval(1000); //use a value fo about 10 to 15s for a real app
+        mLocationRequest.setFastestInterval(1000);
+        mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
 
-            mThread locationThread = new mThread();
-            locationThread.setMsgKey(locationmsgKey);
-            locationThread.start();
-        }
+        mLocationCallback = new LocationCallback() {
+            @Override
+            public void onLocationResult(LocationResult locationResult) {
+                super.onLocationResult(locationResult);
+                for (Location location : locationResult.getLocations()) {
+                    //Update UI with location data
+                    hasGPS = true;
+                    setLocation(location);
+                }
+            }
+        };
 
-//        mThread locationThread = new mThread();
-//        locationThread.setMsgKey(locationmsgKey);
-//        locationThread.start();
+        mFusedLocationProviderClient.requestLocationUpdates(mLocationRequest, mLocationCallback, null);
     }
 
     private void checkPermission(String[] permissions) {
@@ -524,129 +450,22 @@ public class MultiSensors {
         }
     }
 
-    private Criteria getLocationCriteria() {
-        Criteria criteria = new Criteria();
-        // 设置定位精确度 Criteria.ACCURACY_COARSE比较粗略，Criteria.ACCURACY_FINE则比较精细
-        criteria.setAccuracy(Criteria.ACCURACY_FINE);
-        criteria.setSpeedRequired(true); // 设置是否要求速度
-        criteria.setCostAllowed(false); // 设置是否允许运营商收费
-        criteria.setBearingRequired(false); // 设置是否需要方位信息
-        criteria.setAltitudeRequired(false); // 设置是否需要海拔信息
-        criteria.setPowerRequirement(Criteria.POWER_LOW); // 设置对电源的需求
-        return criteria;
-    }
-
-    // 状态监听
-    private GpsStatus.Listener gpsStatusListener = new GpsStatus.Listener() {
-        public void onGpsStatusChanged(int event) {
-            switch (event) {
-                case GpsStatus.GPS_EVENT_FIRST_FIX: // 第一次定位
-                    break;
-
-                case GpsStatus.GPS_EVENT_SATELLITE_STATUS: // 卫星状态改变
-                    checkPermission(new String []{
-                            Manifest.permission.ACCESS_COARSE_LOCATION,
-                            Manifest.permission.ACCESS_FINE_LOCATION
-                    });
-                    GpsStatus gpsStatus = mLocationManager.getGpsStatus(null); // 获取当前状态
-                    int maxSatellites = gpsStatus.getMaxSatellites(); // 获取卫星颗数的默认最大值
-                    Iterator<GpsSatellite> iters = gpsStatus.getSatellites()
-                            .iterator(); // 创建一个迭代器保存所有卫星
-                    int count = 0;
-                    while (iters.hasNext() && count <= maxSatellites) {
-                        GpsSatellite s = iters.next();
-                        count++;
-                    }
-                    break;
-
-                case GpsStatus.GPS_EVENT_STARTED: // 定位启动
-                    break;
-
-                case GpsStatus.GPS_EVENT_STOPPED: // 定位结束
-                    break;
-            }
-        };
-    };
-
-    // 位置监听
-    private class mLocationListener implements LocationListener {
-
-        private String provider;
-
-        public mLocationListener(String provider) { this.provider = provider; }
-        /**
-         * 位置信息变化时触发
-         */
-        @Override
-        public void onLocationChanged(Location location) {
-            // location.getAltitude(); -- 海拔
-            switch (this.provider) {
-                case LocationManager.GPS_PROVIDER:
-                    mGPSLocation = location;
-                    break;
-                case LocationManager.NETWORK_PROVIDER:
-                    mNETLocation = location;
-                    break;
-            }
-           //displayLocation(location);
-        }
-
-        /**
-         * GPS状态变化时触发
-         */
-        public void onStatusChanged(String provider, int status, Bundle extras) {
-            switch (status) {
-                case LocationProvider.AVAILABLE: // GPS状态为可见时
-                    txvResult.setText("\nAvailable");
-                    break;
-
-                case LocationProvider.OUT_OF_SERVICE: // GPS状态为服务区外时
-                    txvResult.setText("\nOut of service");
-                    break;
-
-                case LocationProvider.TEMPORARILY_UNAVAILABLE: // GPS状态为暂停服务时
-                    txvResult.setText("\nTemporarily unavailable");
-                    break;
-            }
-        }
-
-        /**
-         * GPS开启时触发
-         */
-        public void onProviderEnabled(String provider) {
-//            checkPermission(new String []{
-//                    Manifest.permission.ACCESS_COARSE_LOCATION,
-//                    Manifest.permission.ACCESS_FINE_LOCATION
-//            });
-//            Location location = mLocationManager.getLastKnownLocation(provider);
-//            displayLocation(location);
-        }
-
-        /**
-         * GPS禁用时触发
-         */
-        public void onProviderDisabled(String provider) {
-            // updateView(null);
-        }
-
-    };
-
-    private void displayLocation(Location location) {
+    private void setLocation(Location location) {
         if (location != null) {
-            mLatitude = location.getLatitude();
-            mLongitude = location.getLongitude();
-            mSpeed = location.getSpeed();
-            mIndoor = 0;
-
-            outdoorcount += 1;
-            txvResult.setText("Outdoor: " + outdoorcount);
+            mLocData = new locData(location.getLatitude(),
+                    location.getLongitude(),
+                    location.getSpeed(), 0);
         }
         else {
-            mLatitude = 0;
-            mLongitude = 0;
-            mIndoor = 1;
-            indoorcount += 1;
-            txvResult.setText("Indoor: " + indoorcount);
+            mLocData = new locData(0,
+                    0,
+                    0, 1);
+        }
+        if (!hasThread) {
+            mThread locationThread = new mThread();
+            locationThread.setMsgKey(locationmsgKey);
+            locationThread.start();
+            hasThread = true;
         }
     }
 
@@ -761,23 +580,20 @@ public class MultiSensors {
                     break;
                 case Sensor.TYPE_GYROSCOPE:
                     if (startListen_gyro) {
-                        txv.setText("Gyroscope"
-                                + "\nX: " + event.values[0]
-                                + "\nY: " + event.values[1]
-                                + "\nZ: " + event.values[2]
-                                + "\nLatitude: " + mLatitude
-                                + "\nLongitude: " + mLongitude
-                                + "\nSpeed: " + mSpeed
-                                + "\nIndoor: " + mIndoor);
-
                         gyroData gyroData = new gyroData(event.values[0], event.values[1], event.values[2]);
                         gyroDataSet.add(gyroData);
                         gyroNum++;
 
-                        locData locData = new locData(mLatitude, mLongitude, mSpeed, mIndoor);
-                        locDataSet.add(locData);
+                        locDataSet.add(mLocData);
 
-                        mLocation = null;
+                        txv.setText("Gyroscope"
+                                + "\nX: " + event.values[0]
+                                + "\nY: " + event.values[1]
+                                + "\nZ: " + event.values[2]
+                                + "\nLatitude: " + mLocData.getLatitude()
+                                + "\nLongitude: " + mLocData.getLongitude()
+                                + "\nSpeed: " + mLocData.getSpeed()
+                                + "\nIndoor: " + mLocData.getIndoor());
 
                         if (startUpload && gyroNum % uploadWait == 0 && gyroNum - startUploadNum > uploadWait) {
                             startListen_gyro = false;
@@ -791,19 +607,11 @@ public class MultiSensors {
                     break;
                 case Sensor.TYPE_GRAVITY:
                     if (startListen_grav) {
-//                        txv.setText("Gravity"
-//                                + "\nX: " + event.values[0]
-//                                + "\nY: " + event.values[1]
-//                                + "\nZ: " + event.values[2]);
                         gravData = event.values;
                     }
                     break;
                 case Sensor.TYPE_MAGNETIC_FIELD:
                     if (startListen_magn) {
-//                        txv.setText("Magnetic"
-//                                + "\nX: " + event.values[0]
-//                                + "\nY: " + event.values[1]
-//                                + "\nZ: " + event.values[2]);
                         magnData = event.values;
                     }
                     break;

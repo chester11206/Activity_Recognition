@@ -55,6 +55,7 @@
     <string-array name="activity">
         <item>Biking</item>
         <item>In Vehicle</item>
+        <item>MRT</item>
         <item>Running</item>
         <item>Still</item>
         <item>Walking</item>

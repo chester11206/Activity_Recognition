@@ -3,7 +3,7 @@ apply plugin: 'com.android.application'
 android {
     compileSdkVersion 28
     defaultConfig {
-        applicationId "com.example.chester11206.testapp"
+        applicationId "com.example.chester11206.myapplication"
         minSdkVersion 15
         targetSdkVersion 28
         versionCode 1
@@ -52,4 +52,3 @@ dependencies {
     implementation 'com.google.android.gms:play-services-location:15.0.1'
 }
 
-apply plugin: 'com.google.gms.google-services'
